@@ -1,7 +1,6 @@
-$scriptPath = Join-Path $PSScriptRoot "LiveDownloader.ps1"
+$appPath = Join-Path $PSScriptRoot "LiveDownloader.App.ps1"
 
 Start-Process `
     -FilePath "powershell.exe" `
-    -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", $scriptPath) `
-    -WorkingDirectory $PSScriptRoot `
-    -WindowStyle Hidden
+    -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $appPath) `
+    -WorkingDirectory $PSScriptRoot

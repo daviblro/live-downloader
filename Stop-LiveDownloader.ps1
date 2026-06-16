@@ -1,4 +1,15 @@
-$escapedUrl = "https://www.twitch.tv/soucarlosdaniel"
+$configPath = Join-Path $PSScriptRoot "config.json"
+$streamUrls = @()
+
+if (Test-Path -LiteralPath $configPath) {
+    try {
+        $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+        $streamUrls = @($config.Streams | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    }
+    catch {
+        Write-Host "Could not read config.json. Stopping worker processes only."
+    }
+}
 
 $workerProcesses = Get-CimInstance Win32_Process |
     Where-Object {
@@ -6,11 +17,15 @@ $workerProcesses = Get-CimInstance Win32_Process |
         $_.CommandLine -match [regex]::Escape($PSScriptRoot)
     }
 
-$downloadProcesses = Get-CimInstance Win32_Process |
-    Where-Object {
-        $_.Name -ieq "yt-dlp_x86.exe" -and
-        $_.CommandLine -like "*$escapedUrl*"
-    }
+$downloadProcesses = @()
+if ($streamUrls.Count -gt 0) {
+    $downloadProcesses = Get-CimInstance Win32_Process |
+        Where-Object {
+            $processCommandLine = $_.CommandLine
+            $_.Name -match "yt-dlp" -and
+            ($streamUrls | Where-Object { -not [string]::IsNullOrWhiteSpace($processCommandLine) -and $processCommandLine.Contains($_) }).Count -gt 0
+        }
+}
 
 $processes = @()
 if ($null -ne $workerProcesses) {

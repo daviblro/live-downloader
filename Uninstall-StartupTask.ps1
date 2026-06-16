@@ -1,5 +1,5 @@
 param(
-    [string]$TaskName = "SoucarlosdanielLiveDownloader"
+    [string]$TaskName = "LiveDownloader"
 )
 
 Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false

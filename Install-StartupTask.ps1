@@ -1,9 +1,10 @@
 param(
-    [string]$TaskName = "SoucarlosdanielLiveDownloader"
+    [string]$TaskName = "LiveDownloader"
 )
 
 $scriptPath = Join-Path $PSScriptRoot "LiveDownloader.ps1"
-$actionArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`""
+$configPath = Join-Path $PSScriptRoot "config.json"
+$actionArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`" -ConfigPath `"$configPath`""
 $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $actionArgs -WorkingDirectory $PSScriptRoot
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
@@ -15,7 +16,7 @@ Register-ScheduledTask `
     -Trigger $trigger `
     -Principal $principal `
     -Settings $settings `
-    -Description "Checks Twitch every 5 minutes and downloads soucarlosdaniel when live." `
+    -Description "Watches configured live stream URLs and downloads them when live." `
     -Force | Out-Null
 
 Write-Host "Installed scheduled task '$TaskName'. It will run at logon."
