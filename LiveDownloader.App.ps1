@@ -326,19 +326,19 @@ function Refresh-Ui {
     $grid.Rows.Clear()
     foreach ($url in @($config.Streams)) {
         $state = "Watching"
-        $pid = ""
+        $processIdText = ""
         $lastProbe = ""
         $message = "Waiting for worker"
 
         if ($statusMap.ContainsKey($url)) {
             $item = $statusMap[$url]
             $state = [string]$item.State
-            $pid = if ($null -ne $item.ProcessId) { [string]$item.ProcessId } else { "" }
+            $processIdText = if ($null -ne $item.ProcessId) { [string]$item.ProcessId } else { "" }
             $lastProbe = if ($null -ne $item.LastProbeAt) { [string]$item.LastProbeAt } else { "" }
             $message = [string]$item.LastMessage
         }
 
-        $index = $grid.Rows.Add($url, $state, $pid, $lastProbe, $message)
+        $index = $grid.Rows.Add($url, $state, $processIdText, $lastProbe, $message)
         if ($url -eq $selectedUrl) {
             $grid.Rows[$index].Selected = $true
         }
