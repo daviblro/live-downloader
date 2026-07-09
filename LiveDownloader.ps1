@@ -106,6 +106,30 @@ function Get-SafeId {
     }
 }
 
+function Remove-StaleYtDlpTempDirectories {
+    param([int]$MinAgeMinutes = 10)
+
+    $cutoff = (Get-Date).AddMinutes(-$MinAgeMinutes)
+    $tempPath = [System.IO.Path]::GetTempPath()
+
+    Get-ChildItem -LiteralPath $tempPath -Directory -Filter "_MEI*" -ErrorAction SilentlyContinue |
+        Where-Object { $_.LastWriteTime -lt $cutoff } |
+        ForEach-Object {
+            $isYtDlpTemp = (Test-Path -LiteralPath (Join-Path $_.FullName "yt_dlp_ejs")) -or
+                (Test-Path -LiteralPath (Join-Path $_.FullName "yt_dlp"))
+
+            if ($isYtDlpTemp) {
+                try {
+                    Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction Stop
+                    Write-Log "Removed stale yt-dlp temp directory. Path=$($_.FullName)"
+                }
+                catch {
+                    Write-Log "Could not remove stale yt-dlp temp directory. Path=$($_.FullName) Error=$($_.Exception.Message)"
+                }
+            }
+        }
+}
+
 function Test-StreamLive {
     param(
         [string]$Url,
@@ -114,10 +138,21 @@ function Test-StreamLive {
 
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $safeId = Get-SafeId -Value $Url
-    $probeLog = Join-Path $Config.LogDirectory "probe-$safeId-$stamp.log"
+    $probeOutputLog = Join-Path $Config.LogDirectory "probe-$safeId-$stamp.out.log"
+    $probeErrorLog = Join-Path $Config.LogDirectory "probe-$safeId-$stamp.err.log"
 
-    & $Config.YtDlpPath --no-cache --simulate --quiet --no-warnings $Url *> $probeLog
-    $exitCode = $LASTEXITCODE
+    $process = Start-Process `
+        -FilePath $Config.YtDlpPath `
+        -ArgumentList @("--no-cache", "--simulate", "--quiet", "--no-warnings", $Url) `
+        -WorkingDirectory $Config.DownloadDirectory `
+        -RedirectStandardOutput $probeOutputLog `
+        -RedirectStandardError $probeErrorLog `
+        -WindowStyle Hidden `
+        -Wait `
+        -PassThru
+
+    $exitCode = $process.ExitCode
+    $process.Dispose()
     $script:LastProbeAt[$Url] = Get-Date
 
     if ($exitCode -eq 0) {
@@ -125,7 +160,7 @@ function Test-StreamLive {
         return $true
     }
 
-    Write-Log "Probe did not find a live stream. Exit code: $exitCode Url=$Url Details=$probeLog"
+    Write-Log "Probe did not find a live stream. Exit code: $exitCode Url=$Url Output=$probeOutputLog Error=$probeErrorLog"
     return $false
 }
 
@@ -235,6 +270,7 @@ while ($true) {
         }
 
         Stop-RemovedStreams -CurrentStreams $config.Streams
+        Remove-StaleYtDlpTempDirectories
 
         foreach ($url in $config.Streams) {
             if ([string]::IsNullOrWhiteSpace($url)) {

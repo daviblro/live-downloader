@@ -1,0 +1,9 @@
+﻿{
+    "Streams":  [
+                    "https://www.twitch.tv/soucarlosdaniel"
+                ],
+    "YtDlpPath":  "C:\\ffmpeg\\yt-dlp_x86.exe",
+    "CheckIntervalSeconds":  300,
+    "DownloadDirectory":  "F:\\Desktop\\Desktop\\Coding\\GitHub\\live-downloader\\downloads",
+    "LogDirectory":  "F:\\Desktop\\Desktop\\Coding\\GitHub\\live-downloader\\logs"
+}
