@@ -1,5 +1,6 @@
-import { ArrowRight, CircleAlert, Download, FolderOpen, Import, Menu, Pause, Play, Plus, Search } from "lucide-react";
+import { ArrowRight, CircleAlert, Download, ExternalLink, FolderOpen, Import, Menu, Pause, Play, Plus, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { demoPayload } from "./data/demo";
 import { api, isDesktop } from "./lib/desktop";
 import { AddStreamDialog } from "./components/AddStreamDialog";
@@ -8,9 +9,22 @@ import { Sidebar, type View } from "./components/Sidebar";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Avatar, StatusDot } from "./components/StatusDot";
 import { WatchTable } from "./components/WatchTable";
+import { displayReleaseVersion, isNewerRelease, type GitHubRelease } from "./lib/releases";
 import type { AppSettings, BootstrapPayload, RecordingJob, WatchTarget } from "./types";
 
 const formatTime = (value: string | null) => value ? new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(value)) : "Not scheduled";
+const releasesApiUrl = "https://api.github.com/repos/daviblro/live-downloader/releases/latest";
+const releasesPageUrl = "https://github.com/daviblro/live-downloader/releases";
+
+type AvailableRelease = { version: string; url: string };
+
+function ReleaseNotice({ release, onOpen, onDismiss }: { release: AvailableRelease; onOpen: () => void; onDismiss: () => void }) {
+  return <aside className="release-notice" role="status">
+    <Download size={19} aria-hidden="true" />
+    <div><strong>Live Downloader {displayReleaseVersion(release.version)} is available</strong><small>Download the latest installer from GitHub Releases when you are ready.</small></div>
+    <div className="release-notice-actions"><button type="button" className="secondary-action" onClick={onOpen}>View release <ExternalLink size={15} /></button><button type="button" className="icon-button" onClick={onDismiss} aria-label="Dismiss update notice"><X size={16} /></button></div>
+  </aside>;
+}
 
 function Overview({ payload, selected, jobs, onAdd, onCheck, onOpenDownloads, onPauseAll, onResumeAll, onSelect, onStop }: {
   payload: BootstrapPayload; selected: WatchTarget | null; jobs: RecordingJob[]; onAdd: () => void; onCheck: (target: WatchTarget) => void; onOpenDownloads: () => void; onPauseAll: () => void; onResumeAll: () => void; onSelect: (target: WatchTarget) => void; onStop: (jobId: string) => void;
@@ -35,6 +49,7 @@ export default function App() {
   const [showAdd, setShowAdd] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(isDesktop);
+  const [availableRelease, setAvailableRelease] = useState<AvailableRelease | null>(null);
 
   const refresh = useCallback(async () => {
     if (!isDesktop) return;
@@ -58,6 +73,24 @@ export default function App() {
     }).then((dispose) => { unlisten = dispose; });
     return () => unlisten?.();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!isDesktop) return;
+    let cancelled = false;
+    void (async () => {
+      const [installedVersion, response] = await Promise.all([
+        getVersion(),
+        fetch(releasesApiUrl, { headers: { Accept: "application/vnd.github+json" } }),
+      ]);
+      if (!response.ok) return;
+      const release = await response.json() as GitHubRelease;
+      if (cancelled || release.draft || release.prerelease || typeof release.tag_name !== "string" || typeof release.html_url !== "string") return;
+      if (isNewerRelease(release.tag_name, installedVersion)) {
+        setAvailableRelease({ version: release.tag_name, url: release.html_url });
+      }
+    })().catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const importLegacy = () => void action(async () => { await api.importLegacy(); await refresh(); }, "Legacy watch list imported.");
@@ -89,6 +122,11 @@ export default function App() {
     setSelectedId(target.id);
   };
   const openDownloads = () => void action(async () => { if (isDesktop) await api.openDownloads(); }, "Downloads folder opened.");
+  const openAvailableRelease = () => void action(async () => {
+    const url = availableRelease?.url ?? releasesPageUrl;
+    if (isDesktop) await api.openUrl(url);
+    else window.open(url, "_blank", "noopener,noreferrer");
+  });
   const pauseAll = () => void action(async () => { if (isDesktop) { await api.pauseAll(); await refresh(); } else updatePayload({ engine: { ...payload.engine, running: false } }); }, "Monitoring paused and active recordings are stopping.");
   const resumeAll = () => void action(async () => { if (isDesktop) { await api.startEngine(); await refresh(); } else updatePayload({ engine: { ...payload.engine, running: true } }); }, "Monitoring resumed.");
   const checkNow = (target: WatchTarget) => void action(async () => { if (isDesktop) { await api.checkNow(target.id); await refresh(); } else setMessage(`Checking ${target.name} now.`); });
@@ -100,7 +138,7 @@ export default function App() {
     <Sidebar active={view} onNavigate={setView} onOpenDownloads={openDownloads} downloadDirectory={payload.settings.downloadDirectory} />
     <main className="main-content">
       {loading && <div className="loading-layer">Starting Live Downloader…</div>}
-      {view === "overview" && <Overview payload={payload} selected={selected} jobs={payload.jobs} onAdd={() => setShowAdd(true)} onCheck={checkNow} onOpenDownloads={openDownloads} onPauseAll={pauseAll} onResumeAll={resumeAll} onSelect={(target) => setSelectedId(target.id)} onStop={stopJob} />}
+      {view === "overview" && <>{availableRelease && <ReleaseNotice release={availableRelease} onOpen={openAvailableRelease} onDismiss={() => setAvailableRelease(null)} />}<Overview payload={payload} selected={selected} jobs={payload.jobs} onAdd={() => setShowAdd(true)} onCheck={checkNow} onOpenDownloads={openDownloads} onPauseAll={pauseAll} onResumeAll={resumeAll} onSelect={(target) => setSelectedId(target.id)} onStop={stopJob} /></>}
       {view === "watch-list" && <section className="list-view"><header className="topbar"><div><h1>Watch list</h1><p>Monitor, pause, and check every source from one place.</p></div><button type="button" className="primary-action" onClick={() => setShowAdd(true)}><Plus size={18} />Add stream</button></header><div className="list-toolbar"><label className="search-field"><Search size={17} /><input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter by source, URL, or state" /></label><span>{filteredTargets.length} sources</span></div><WatchTable targets={filteredTargets} selectedId={selectedId} onSelect={(target) => setSelectedId(target.id)} onCheck={checkNow} onToggle={toggleTarget} onRemove={removeTarget} /></section>}
       {view === "history" && <section className="history-view"><header className="topbar"><div><h1>Recording history</h1><p>Recent completed, cancelled, and failed recording attempts.</p></div><button type="button" className="secondary-action" onClick={openDownloads}><FolderOpen size={16} />Open downloads</button></header><div className="history-list">{payload.jobs.map((job) => <article key={job.id} className="history-row"><Avatar label={job.targetName} /><div className="history-title"><strong>{job.targetName}</strong><span>{new Date(job.startedAt).toLocaleString()}</span></div><StatusDot state={job.state} /><p>{job.message}</p><button type="button" className="quiet-action" disabled={!job.outputPath} onClick={() => isDesktop && void api.revealRecording(job.id)}>{job.outputPath ? "Reveal file" : "No file yet"}</button></article>)}</div></section>}
       {view === "settings" && <SettingsPanel settings={payload.settings} onSave={updateSettings} />}

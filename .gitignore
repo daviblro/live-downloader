@@ -6,6 +6,9 @@ src-tauri/target/
 src-tauri/binaries/*.exe
 !src-tauri/binaries/.gitkeep
 !src-tauri/binaries/yt-dlp-x86_64-pc-windows-msvc.exe
+!src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe
+!src-tauri/binaries/ffprobe-x86_64-pc-windows-msvc.exe
+/ffmpeg/
 *.db
 *.db-shm
 *.db-wal

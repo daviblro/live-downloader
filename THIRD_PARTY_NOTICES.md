@@ -14,8 +14,16 @@ the release workflow when a supported yt-dlp update is adopted.
 
 ## FFmpeg
 
-FFmpeg is not currently packaged because no redistributable build was present in
-the legacy installation. Live Downloader detects and uses yt-dlp without it for
-supported direct streams. Before enabling workflows that require post-processing
-or stream merging, select an FFmpeg distribution, include its matching license
-notices, and add it to the sidecar release manifest.
+The Windows installer packages `ffmpeg.exe` and `ffprobe.exe` from the Gyan.dev
+FFmpeg 64-bit static essentials build:
+
+- Version: `2026-06-08-git-6028720d70-essentials_build-www.gyan.dev`
+- Upstream FFmpeg source commit: `6028720d70`
+- Distribution source: <https://www.gyan.dev/ffmpeg/builds/>
+- License: GNU General Public License version 3
+
+The exact GPL text and the build README/source reference are bundled in the
+installed application resources under `resources/third-party/ffmpeg`. The
+executables remain separate sidecar processes; this notice is not legal advice.
+Review the GPL obligations for the intended distribution model before publishing
+the installer.

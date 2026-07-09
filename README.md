@@ -1,75 +1,35 @@
 # Live Downloader
 
-Simple Windows PowerShell app for watching one or more live stream URLs and downloading each stream when it goes live.
+Live Downloader is a Windows desktop app for monitoring authorised live-stream
+URLs and recording them locally when they become available. It runs quietly in
+the system tray, supports automatic startup, and keeps the watch list and
+recording history on the device.
 
-The app stores its settings in `config.json`, downloads videos into `downloads/`, and writes logs/status into `logs/`.
+The installer includes `yt-dlp`, FFmpeg, and FFprobe. No separate media-tool
+installation or PATH setup is required.
 
-## Requirements
+## Install
 
-- Windows PowerShell
-- `yt-dlp` executable, defaulting to `C:\ffmpeg\yt-dlp_x86.exe`
+1. Open the [GitHub Releases page](https://github.com/daviblro/live-downloader/releases).
+2. Download the latest `Live Downloader_*_x64-setup.exe` installer.
+3. Run the installer, then start **Live Downloader** from the Start menu.
+4. Select **Add stream**, give the source a name, and enter an authorised HTTP or
+   HTTPS stream URL.
 
-## Open The Windows App
+The installer is per-user and normally does not request administrator access. If
+Microsoft WebView2 is not already installed, Windows downloads it during setup.
 
-```powershell
-.\Start-LiveDownloader.ps1
-```
+## Using the app
 
-From the app you can:
+- Keep sources in the **Watch list** and use **Pause all** when you want to stop
+  monitoring.
+- Configure the download folder, monitoring limits, notifications, appearance,
+  and **Start with Windows** under **Settings**.
+- Closing the window keeps the recorder available in the system tray; choose
+  **Exit Live Downloader** from the tray menu to stop it completely.
+- The app checks GitHub Releases at launch and shows a non-intrusive notice when
+  a newer installer is available. Updates are installed by downloading the new
+  installer from GitHub Releases.
 
-- add more than one stream URL
-- remove URLs you no longer want to watch
-- start or stop watching
-- download multiple live streams at the same time
-- choose the `yt-dlp` executable path
-- change how often streams are checked
-- open the downloads folder
-
-## Background Worker
-
-The visible app starts `LiveDownloader.ps1` as a hidden worker when you click **Start Watching**.
-
-You can also run the worker directly:
-
-```powershell
-.\LiveDownloader.ps1
-```
-
-Or with custom values the first time it creates `config.json`:
-
-```powershell
-.\LiveDownloader.ps1 `
-  -StreamUrl "https://www.twitch.tv/example1","https://www.twitch.tv/example2" `
-  -YtDlpPath "C:\ffmpeg\yt-dlp_x86.exe" `
-  -CheckIntervalSeconds 300
-```
-
-The worker reloads `config.json` on every check cycle, so URLs added in the app are picked up automatically.
-
-## Stop Everything
-
-```powershell
-.\Stop-LiveDownloader.ps1
-```
-
-This stops the hidden worker and any active `yt-dlp` downloads for the configured stream URLs.
-
-## Start Automatically When You Log In
-
-Install the scheduled task:
-
-```powershell
-.\Install-StartupTask.ps1
-```
-
-Start it immediately without waiting for the next login:
-
-```powershell
-Start-ScheduledTask -TaskName "LiveDownloader"
-```
-
-Remove the scheduled task:
-
-```powershell
-.\Uninstall-StartupTask.ps1
-```
+Only record streams you are authorised to capture. See
+[third-party notices](THIRD_PARTY_NOTICES.md) for bundled-component licensing.

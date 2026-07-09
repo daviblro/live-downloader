@@ -1,56 +1,62 @@
 # Releasing Live Downloader for Windows
 
-## Prerequisites
+## Version and tag
 
-- Windows 10/11 x64 build host with the Rust MSVC toolchain and Node.js installed.
-- The managed sidecar at
-  `src-tauri/binaries/yt-dlp-x86_64-pc-windows-msvc.exe`.
-- Review [`../THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) whenever the
-  sidecar changes. Do not silently replace it with an unverified binary.
+Keep the version aligned in `package.json`, `src-tauri/Cargo.toml`, and
+`src-tauri/tauri.conf.json`. Create an annotated Git tag named `v<version>` from
+`main` (for example, `v1.0.0`) and push it to GitHub. The **Publish Windows
+release** workflow validates the version, builds the NSIS installer, and uploads
+it to the matching GitHub Release.
 
-## Build the installer
+The app does not use Tauri's in-place updater. At launch it reads the public
+GitHub Releases API and, if a newer stable release is available, offers a button
+to open that release in the user's browser.
+
+## Local build
+
+Prerequisites:
+
+- Windows 10/11 x64 build host with the Rust MSVC toolchain and Node.js.
+- Managed executables at `src-tauri/binaries/` for yt-dlp, FFmpeg, and FFprobe.
+- A review of [`../THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) whenever a
+  bundled sidecar changes.
+
+Build and inspect the per-user NSIS installer:
 
 ```powershell
-pnpm install
+pnpm install --frozen-lockfile
 pnpm build
+cargo test --manifest-path src-tauri/Cargo.toml
 pnpm exec tauri build --bundles nsis
 ```
 
-The per-user NSIS installer is written under:
+The installer is written to:
 
 ```text
 src-tauri/target/release/bundle/nsis/
 ```
 
-It installs beneath the current user's `%LOCALAPPDATA%` directory, so routine
-installs do not require elevation. The bundled installer hook deliberately leaves
-the user's download library untouched when the app is removed.
+It keeps the download library intact on uninstall. The installer uses WebView2's
+download bootstrapper, so an unprovisioned Windows computer needs internet access
+once during setup.
 
-## Signing
+## GitHub Actions
 
-Before distributing outside a private test group, sign the application and setup
-executable with a Windows code-signing certificate and timestamp every signature.
-Set the certificate thumbprint and timestamp URL in a private Tauri config overlay
-or CI secret; never commit either credential to this repository.
+- **Validate** runs on pull requests to `main` and every push to `main`. It type
+  checks the frontend, runs Rust tests, builds the NSIS installer, and retains the
+  installer as a short-lived workflow artifact.
+- **Publish Windows release** runs only for `v*` tags. It builds the installer on
+  a clean Windows runner and attaches it to the GitHub Release. The workflow uses
+  GitHub's built-in token and requires `contents: write` permission.
 
-## Application updates
+## Signing and licensing
 
-The updater plugin is intentionally inactive in `tauri.conf.json` until there is a
-controlled HTTPS release endpoint and an offline-held Tauri signing key. To enable
-it for a release channel:
+Before broad distribution, sign the application and setup executable with a
+Windows code-signing certificate and timestamp the signatures. Store signing
+material only in GitHub Actions secrets; never commit it.
 
-1. Generate a Tauri updater signing key and store it in the CI secret manager.
-2. Publish signed NSIS artifacts plus the channel JSON manifest to an HTTPS
-   endpoint owned by the product.
-3. Add the public key and `endpoints` to a private production config overlay, then
-   set `plugins.updater.active` to `true` for the release build only.
-4. Test an update from the preceding installer on a clean Windows VM before
-   promoting the release.
-
-This keeps an unconfigured updater from advertising or accepting unknown releases.
-
-## FFmpeg follow-up
-
-The current installer packages yt-dlp. Select and audit a redistributable FFmpeg
-build before adding it to `bundle.externalBin`; then update the third-party notice,
-sidecar manifest, and clean-VM tests together.
+The installer packages the Gyan.dev 64-bit static essentials build of FFmpeg and
+FFprobe and passes its deployed directory to yt-dlp through `--ffmpeg-location`.
+Update the target-triple binaries, GPL/source resource files, and
+[`../THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) together. Do not package
+`ffplay`, the FFmpeg documentation tree, presets, or unrelated legacy binaries.

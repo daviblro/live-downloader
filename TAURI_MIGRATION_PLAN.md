@@ -211,10 +211,50 @@ The implementation is complete; the following items require product-owner secret
 or a third-party distribution decision rather than further application code:
 
 1. Obtain and configure a Windows code-signing certificate plus timestamp service.
-2. Provide a controlled HTTPS updater endpoint and Tauri signing key, then enable
-   the updater in the release-only config overlay described in `docs/RELEASING.md`.
-3. Choose, license-review, and package an FFmpeg build if workflows requiring stream
-   merging/post-processing must be supported.
-4. Run the signed installer and one update cycle on a clean Windows VM before a
-   public release. No real provider recording was started during implementation or
-   QA.
+2. Run the signed installer on a clean Windows VM before broad distribution. The
+   application delivers manual updates through GitHub Releases rather than an
+   in-place Tauri updater.
+3. Complete the product-owner/legal review of the bundled GPL v3 FFmpeg essentials
+   build and its distribution obligations before public release. The required
+   notices and upstream build reference are bundled, but this plan is not legal
+   advice.
+4. Perform one authorised provider-recording smoke test on a clean machine. No
+   real provider recording was started during implementation or QA.
+
+### 2026-07-10 — FFmpeg out-of-box packaging
+
+- Inspected the user-provided `ffmpeg` folder and verified FFmpeg/FFprobe execute
+  successfully. The selected source is the Gyan.dev 64-bit static essentials build
+  `2026-06-08-git-6028720d70`, licensed under GPL v3.
+- Packaging now includes only `ffmpeg.exe`, `ffprobe.exe`, and their GPL/source
+  notices. It intentionally excludes `ffplay.exe`, the documentation, presets, and
+  duplicate legacy yt-dlp binaries.
+- The recording engine supplies the deployed Tauri sidecar directory to yt-dlp via
+  `--ffmpeg-location`; end users do not need FFmpeg on PATH.
+- Re-ran unit tests, `cargo check`, frontend production build, and whitespace
+  validation after the integration. The Rust test suite now includes coverage for
+  resolving the deployed sidecar directory from normal and Cargo `deps` paths.
+- Built the NSIS installer successfully. The resulting
+  `src-tauri/target/release/bundle/nsis/Live Downloader_0.1.0_x64-setup.exe` is
+  71,917,092 bytes (2026-07-10 00:37 local time).
+- Inspected the completed NSIS archive. It contains `live-downloader.exe`,
+  `yt-dlp.exe`, `ffmpeg.exe` (101,774,336 bytes), `ffprobe.exe` (101,568,000
+  bytes), and the bundled FFmpeg GPL/source notices. This confirms a fresh user
+  installation receives all required executables without a separate FFmpeg or
+  yt-dlp installation.
+
+### 2026-07-10 â€” GitHub release delivery and v1.0.0 preparation
+
+- Aligned the frontend package, Rust package, and Tauri bundle at version `1.0.0`.
+  The local NSIS build produced
+  `src-tauri/target/release/bundle/nsis/Live Downloader_1.0.0_x64-setup.exe`
+  (71,911,578 bytes) and archive inspection reconfirmed the yt-dlp, FFmpeg, and
+  FFprobe payloads plus the FFmpeg GPL/source resources.
+- Added a read-only GitHub Releases availability check. The installed app compares
+  its own version with the latest stable release and shows a dismissible dashboard
+  notice that opens the matching GitHub Release in the userâ€™s default browser. It
+  does not download, install, or trust an in-place updater.
+- Added Windows-only validation and tag-driven publishing workflows. Pull requests
+  and pushes to `main` build/test the app and retain an installer artifact; `v*`
+  tags build an installer on a clean Windows runner and attach it to the GitHub
+  Release.

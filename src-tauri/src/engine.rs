@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -265,13 +265,14 @@ impl RecordingEngine {
         if !is_http_url(url) {
             return Err("The stream URL must be an absolute HTTP or HTTPS URL.".to_owned());
         }
-        let args = vec![
+        let mut args = vec![
             "--no-cache".to_owned(),
             "--simulate".to_owned(),
             "--quiet".to_owned(),
             "--no-warnings".to_owned(),
-            url.to_owned(),
         ];
+        append_managed_ffmpeg_location(&mut args);
+        args.push(url.to_owned());
         match self.command_source(settings)? {
             CommandSource::Bundled => {
                 let output = self
@@ -329,14 +330,15 @@ impl RecordingEngine {
         let output_template =
             output_directory.join("%(uploader)s_%(upload_date)s_%(title)s.%(ext)s");
         let job = self.database.create_job(&target.id, None)?;
-        let args = vec![
+        let mut args = vec![
             "--no-cache".to_owned(),
             "--newline".to_owned(),
             "--continue".to_owned(),
             "--output".to_owned(),
             output_template.to_string_lossy().to_string(),
-            target.url.clone(),
         ];
+        append_managed_ffmpeg_location(&mut args);
+        args.push(target.url.clone());
         let cancellation = CancellationToken::new();
 
         match source {
@@ -474,6 +476,9 @@ impl RecordingEngine {
         match settings.external_ytdlp_path.as_ref() {
             Some(path) if Path::new(path).is_file() => "External yt-dlp ready".to_owned(),
             Some(_) => "External yt-dlp path is unavailable".to_owned(),
+            None if managed_ffmpeg_directory().is_some() => {
+                "Managed yt-dlp + FFmpeg sidecars".to_owned()
+            }
             None => "Managed yt-dlp sidecar".to_owned(),
         }
     }
@@ -488,6 +493,27 @@ impl RecordingEngine {
 enum CommandSource {
     Bundled,
     External(std::path::PathBuf),
+}
+
+fn append_managed_ffmpeg_location(args: &mut Vec<String>) {
+    if let Some(directory) = managed_ffmpeg_directory() {
+        args.push("--ffmpeg-location".to_owned());
+        args.push(directory.to_string_lossy().to_string());
+    }
+}
+
+fn managed_ffmpeg_directory() -> Option<PathBuf> {
+    let directory = bundled_sidecar_directory_from(&std::env::current_exe().ok()?)?;
+    directory.join("ffmpeg.exe").is_file().then_some(directory)
+}
+
+fn bundled_sidecar_directory_from(executable: &Path) -> Option<PathBuf> {
+    let directory = executable.parent()?;
+    if directory.file_name().is_some_and(|name| name == "deps") {
+        directory.parent().map(Path::to_path_buf)
+    } else {
+        Some(directory.to_path_buf())
+    }
 }
 
 async fn wait_for_sidecar_termination(
@@ -507,4 +533,23 @@ async fn wait_for_sidecar_termination(
         }
     }
     "yt-dlp output stream ended unexpectedly".to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::bundled_sidecar_directory_from;
+
+    #[test]
+    fn resolves_the_same_sidecar_directory_as_tauri_shell() {
+        assert_eq!(
+            bundled_sidecar_directory_from(Path::new(r"C:\app\live-downloader.exe")),
+            Some(r"C:\app".into())
+        );
+        assert_eq!(
+            bundled_sidecar_directory_from(Path::new(r"C:\app\deps\live_downloader_tests.exe")),
+            Some(r"C:\app".into())
+        );
+    }
 }

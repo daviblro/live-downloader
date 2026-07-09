@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { disable, enable } from "@tauri-apps/plugin-autostart";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { AppSettings, BootstrapPayload, CreateTargetInput, EngineSummary, RecordingJob, UpdateTargetInput, WatchTarget } from "../types";
 
 export const isDesktop = "__TAURI_INTERNALS__" in window;
@@ -19,6 +20,7 @@ export const api = {
   history: () => invoke<RecordingJob[]>("list_history"),
   importLegacy: () => invoke("import_legacy"),
   openDownloads: () => invoke<void>("open_download_directory"),
+  openUrl: (url: string) => openUrl(url),
   revealRecording: (jobId: string) => invoke<void>("reveal_recording", { jobId }),
   listenEngine: (handler: (summary: EngineSummary) => void) => listen<EngineSummary>("engine://changed", (event) => handler(event.payload)),
   setAutostart: async (enabled: boolean) => enabled ? enable() : disable(),
