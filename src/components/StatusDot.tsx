@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { useI18n } from "../i18n";
 
 const stateClass: Record<string, string> = {
   Recording: "recording",
@@ -13,7 +14,8 @@ const stateClass: Record<string, string> = {
 };
 
 export function StatusDot({ state, compact = false }: { state: string; compact?: boolean }) {
-  return <span className={`status ${stateClass[state] ?? "muted"} ${compact ? "compact" : ""}`}><i />{!compact && state}</span>;
+  const { translation: t } = useI18n();
+  return <span className={`status ${stateClass[state] ?? "muted"} ${compact ? "compact" : ""}`}><i />{!compact && (t.states[state] ?? state)}</span>;
 }
 
 export function Avatar({ label, index = 0 }: { label: string; index?: number }) {

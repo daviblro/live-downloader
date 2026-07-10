@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
+    #[serde(default = "default_locale")]
+    pub locale: String,
     pub theme: String,
     pub download_directory: String,
     pub probe_interval_seconds: u64,
@@ -16,6 +18,10 @@ pub struct AppSettings {
     pub external_ytdlp_path: Option<String>,
 }
 
+fn default_locale() -> String {
+    "en".to_owned()
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         let download_directory = directories::UserDirs::new()
@@ -23,6 +29,7 @@ impl Default for AppSettings {
             .unwrap_or_else(|| std::path::PathBuf::from("downloads"));
 
         Self {
+            locale: default_locale(),
             theme: "system".to_owned(),
             download_directory: download_directory.to_string_lossy().to_string(),
             probe_interval_seconds: 300,

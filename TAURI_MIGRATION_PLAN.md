@@ -267,3 +267,18 @@ or a third-party distribution decision rather than further application code:
 - The one-time import path remains intact for a person who still has an older
   `config.json` outside this repository; it discovers and imports that file only
   when requested.
+
+### 2026-07-10 — Internationalisation foundation
+
+- Added a typed English and Brazilian Portuguese catalog covering the dashboard,
+  watch list, recording history, settings, dialogs, states, runtime labels, dates,
+  release notice, and accessible control labels.
+- Added the persisted `locale` setting with a backward-compatible Rust default of
+  `en`, so existing SQLite settings records continue to load safely. Rust rejects
+  unsupported locale values.
+- The Settings selector presents native language names: `English` and
+  `Português (Brasil)`. A selection previews immediately, and **Save changes**
+  persists it for the next launch.
+- Browser QA verified both saved language states, `lang="pt-BR"`, localized date
+  formatting, no desktop/mobile horizontal overflow, and a corrected Portuguese
+  recording-count plural. `pnpm build`, Cargo tests, and Cargo check pass.

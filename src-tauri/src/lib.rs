@@ -109,6 +109,9 @@ async fn save_settings(
     settings: AppSettings,
     state: State<'_, AppState>,
 ) -> Result<AppSettings, String> {
+    if !matches!(settings.locale.as_str(), "en" | "pt-BR") {
+        return Err("Choose a supported application language.".to_owned());
+    }
     let directory = PathBuf::from(&settings.download_directory);
     if settings.download_directory.trim().is_empty() {
         return Err("Choose a download directory.".to_owned());

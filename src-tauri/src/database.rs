@@ -390,6 +390,8 @@ mod tests {
         let mut settings = database
             .settings()
             .expect("default settings should be written");
+        assert_eq!(settings.locale, "en");
+        settings.locale = "pt-BR".to_owned();
         settings.probe_interval_seconds = 90;
         database
             .save_settings(&settings)
@@ -400,6 +402,10 @@ mod tests {
                 .expect("settings should load")
                 .probe_interval_seconds,
             90
+        );
+        assert_eq!(
+            database.settings().expect("settings should load").locale,
+            "pt-BR"
         );
 
         let target = database
@@ -425,6 +431,43 @@ mod tests {
         let history = database.list_jobs(10).expect("history should list");
         assert_eq!(history[0].state, "Completed");
         assert_eq!(history[0].process_id, Some(42));
+
+        drop(database);
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(path.with_extension("db-shm"));
+        let _ = std::fs::remove_file(path.with_extension("db-wal"));
+    }
+
+    #[test]
+    fn defaults_locale_for_existing_settings_without_one() {
+        let path =
+            std::env::temp_dir().join(format!("live-downloader-test-{}.db", uuid::Uuid::new_v4()));
+        let database = Database::open(&path).expect("database should open");
+        let mut legacy_settings = serde_json::to_value(crate::models::AppSettings::default())
+            .expect("default settings should serialize");
+        legacy_settings
+            .as_object_mut()
+            .expect("settings should be an object")
+            .remove("locale");
+        let legacy_json =
+            serde_json::to_string(&legacy_settings).expect("legacy settings should serialize");
+        database
+            .connection
+            .lock()
+            .expect("database should unlock")
+            .execute(
+                "INSERT INTO settings (key, value, updated_at) VALUES ('app_settings', ?1, ?2)",
+                rusqlite::params![legacy_json, "2026-07-10T00:00:00Z"],
+            )
+            .expect("legacy settings should insert");
+
+        assert_eq!(
+            database
+                .settings()
+                .expect("legacy settings should load")
+                .locale,
+            "en"
+        );
 
         drop(database);
         let _ = std::fs::remove_file(&path);

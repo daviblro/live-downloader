@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { type FormEvent, useState } from "react";
+import { useI18n } from "../i18n";
 
 interface AddStreamDialogProps {
   onClose: () => void;
@@ -7,6 +8,7 @@ interface AddStreamDialogProps {
 }
 
 export function AddStreamDialog({ onClose, onSubmit }: AddStreamDialogProps) {
+  const { translation: t } = useI18n();
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -28,12 +30,12 @@ export function AddStreamDialog({ onClose, onSubmit }: AddStreamDialogProps) {
 
   return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
     <section className="modal" role="dialog" aria-modal="true" aria-labelledby="add-stream-title" onMouseDown={(event) => event.stopPropagation()}>
-      <header><div><h2 id="add-stream-title">Add stream</h2><p>Live Downloader will validate the URL before it is watched.</p></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button></header>
+      <header><div><h2 id="add-stream-title">{t.dialog.title}</h2><p>{t.dialog.description}</p></div><button type="button" className="icon-button" onClick={onClose} aria-label={t.dialog.close}><X size={18} /></button></header>
       <form onSubmit={submit}>
-        <label>Source name<input autoFocus required value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Northernlight" /></label>
-        <label>Stream URL<input required type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://www.twitch.tv/example" /></label>
+        <label>{t.dialog.sourceName}<input autoFocus required value={name} onChange={(event) => setName(event.target.value)} placeholder={t.dialog.sourceNamePlaceholder} /></label>
+        <label>{t.dialog.streamUrl}<input required type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://www.twitch.tv/example" /></label>
         {error && <p className="form-error" role="alert">{error}</p>}
-        <footer><button type="button" className="secondary-action" onClick={onClose}>Cancel</button><button className="primary-action" disabled={submitting}>{submitting ? "Adding…" : "Add stream"}</button></footer>
+        <footer><button type="button" className="secondary-action" onClick={onClose}>{t.common.cancel}</button><button className="primary-action" disabled={submitting}>{submitting ? t.dialog.adding : t.common.addStream}</button></footer>
       </form>
     </section>
   </div>;

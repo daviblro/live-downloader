@@ -5,6 +5,7 @@ const at = (minutes: number) => new Date(now.getTime() + minutes * 60_000).toISO
 
 export const demoPayload: BootstrapPayload = {
   settings: {
+    locale: "en",
     theme: "dark",
     downloadDirectory: "D:\\LiveDownloader\\Recordings",
     probeIntervalSeconds: 300,

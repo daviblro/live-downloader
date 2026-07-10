@@ -1,6 +1,8 @@
 export type Theme = "system" | "light" | "dark";
+export type Locale = "en" | "pt-BR";
 
 export interface AppSettings {
+  locale: Locale;
   theme: Theme;
   downloadDirectory: string;
   probeIntervalSeconds: number;
