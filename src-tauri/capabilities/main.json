@@ -10,7 +10,14 @@
     "autostart:allow-disable",
     "autostart:allow-is-enabled",
     "notification:default",
-    "opener:allow-open-url",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://github.com/daviblro/live-downloader/issues/new/choose"
+        }
+      ]
+    },
     "opener:allow-reveal-item-in-dir"
   ]
 }
