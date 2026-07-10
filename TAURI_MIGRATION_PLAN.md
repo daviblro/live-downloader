@@ -258,3 +258,12 @@ or a third-party distribution decision rather than further application code:
   and pushes to `main` build/test the app and retain an installer artifact; `v*`
   tags build an installer on a clean Windows runner and attach it to the GitHub
   Release.
+
+### 2026-07-10 — Legacy PowerShell retirement
+
+- Removed the superseded PowerShell UI, worker, startup-task wrappers, and the
+  repository-specific legacy `config.json`. The new app has its own SQLite-backed
+  settings and does not depend on those files.
+- The one-time import path remains intact for a person who still has an older
+  `config.json` outside this repository; it discovers and imports that file only
+  when requested.
