@@ -11,7 +11,7 @@ installation or PATH setup is required.
 ## Install
 
 1. Open the [GitHub Releases page](https://github.com/daviblro/live-downloader/releases).
-2. Download the latest `Live Downloader_*_x64-setup.exe` installer.
+2. Download the latest `*_x64-setup.exe` installer.
 3. Run the installer, then start **Live Downloader** from the Start menu.
 4. Select **Add stream**, give the source a name, and enter an authorised HTTP or
    HTTPS stream URL.
