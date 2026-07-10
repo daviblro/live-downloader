@@ -86,8 +86,16 @@ pub struct EngineSummary {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DiskUsage {
+    pub total_bytes: u64,
+    pub available_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BootstrapPayload {
     pub settings: AppSettings,
+    pub disk_usage: Option<DiskUsage>,
     pub targets: Vec<WatchTarget>,
     pub jobs: Vec<RecordingJob>,
     pub engine: EngineSummary,

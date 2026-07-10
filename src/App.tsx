@@ -3,6 +3,7 @@ import { ArrowRight, Download, ExternalLink, FolderOpen, Import, Menu, Pause, Pl
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ToastContainer, toast, type Theme } from "react-toastify";
 import { AddStreamDialog } from "./components/AddStreamDialog";
+import { HelpPanel } from "./components/HelpPanel";
 import { Inspector } from "./components/Inspector";
 import { Sidebar, type View } from "./components/Sidebar";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -16,6 +17,7 @@ import type { AppSettings, BootstrapPayload, Locale, RecordingJob, WatchTarget }
 
 const releasesApiUrl = "https://api.github.com/repos/daviblro/live-downloader/releases/latest";
 const releasesPageUrl = "https://github.com/daviblro/live-downloader/releases";
+const issuesPageUrl = "https://github.com/daviblro/live-downloader/issues/new/choose";
 
 type AvailableRelease = { version: string; url: string };
 
@@ -168,13 +170,14 @@ export default function App() {
   const navigate = (nextView: View) => { if (nextView !== "settings") setLocalePreview(null); setView(nextView); };
 
   return <I18nProvider locale={locale}><div className="app-shell">
-    <Sidebar active={view} onNavigate={navigate} onOpenDownloads={openDownloads} downloadDirectory={payload.settings.downloadDirectory} />
+    <Sidebar active={view} onNavigate={navigate} onOpenDownloads={openDownloads} downloadDirectory={payload.settings.downloadDirectory} diskUsage={payload.diskUsage} />
     <main className="main-content">
       {loading && <div className="loading-layer">{t.overview.starting}</div>}
       {view === "overview" && <>{availableRelease && <ReleaseNotice release={availableRelease} onOpen={openAvailableRelease} onDismiss={() => setAvailableRelease(null)} />}<Overview payload={payload} selected={selected} jobs={payload.jobs} onAdd={() => setShowAdd(true)} onCheck={checkNow} onOpenDownloads={openDownloads} onPauseAll={pauseAll} onResumeAll={resumeAll} onSelect={(target) => setSelectedId(target.id)} onStop={stopJob} /></>}
       {view === "watch-list" && <section className="list-view"><header className="topbar"><div><h1>{t.list.title}</h1><p>{t.list.description}</p></div><button type="button" className="primary-action" onClick={() => setShowAdd(true)}><Plus size={18} />{t.common.addStream}</button></header><div className="list-toolbar"><label className="search-field"><Search size={17} /><input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={t.list.filterPlaceholder} /></label><span>{t.list.sources(filteredTargets.length)}</span></div><WatchTable targets={filteredTargets} selectedId={selectedId} onSelect={(target) => setSelectedId(target.id)} onCheck={checkNow} onToggle={toggleTarget} onRemove={removeTarget} /></section>}
       {view === "history" && <section className="history-view"><header className="topbar"><div><h1>{t.history.title}</h1><p>{t.history.description}</p></div><button type="button" className="secondary-action" onClick={openDownloads}><FolderOpen size={16} />{t.common.openDownloads}</button></header><div className="history-list">{payload.jobs.map((job) => <article key={job.id} className="history-row"><Avatar label={job.targetName} /><div className="history-title"><strong>{job.targetName}</strong><span>{new Date(job.startedAt).toLocaleString(localeTag[locale])}</span></div><StatusDot state={job.state} /><p>{localizeRuntimeText(job.message, t)}</p><button type="button" className="quiet-action" disabled={!job.outputPath} onClick={() => isDesktop && void api.revealRecording(job.id)}>{job.outputPath ? t.history.revealFile : t.history.noFileYet}</button></article>)}</div></section>}
       {view === "settings" && <SettingsPanel settings={payload.settings} onSave={updateSettings} onLocalePreview={previewLocale} />}
+      {view === "help" && <HelpPanel onOpenIssues={() => void action(async () => { if (isDesktop) await api.openUrl(issuesPageUrl); else window.open(issuesPageUrl, "_blank", "noopener,noreferrer"); })} />}
     </main>
     <button type="button" className="mobile-menu" onClick={() => navigate(view === "watch-list" ? "overview" : "watch-list")} aria-label={t.common.switchView}><Menu size={20} /></button>
     <ToastContainer

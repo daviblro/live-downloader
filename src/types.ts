@@ -49,8 +49,14 @@ export interface EngineSummary {
   sidecarStatus: string;
 }
 
+export interface DiskUsage {
+  totalBytes: number;
+  availableBytes: number;
+}
+
 export interface BootstrapPayload {
   settings: AppSettings;
+  diskUsage: DiskUsage | null;
   targets: WatchTarget[];
   jobs: RecordingJob[];
   engine: EngineSummary;

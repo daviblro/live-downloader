@@ -12,8 +12,8 @@ export const localeTag: Record<Locale, string> = {
 };
 
 export interface Translation {
-  nav: Record<"overview" | "watchList" | "history" | "settings", string>;
-  sidebar: Record<"primaryNavigation" | "diskHealth" | "good" | "libraryReady" | "recordingPath", string>;
+  nav: Record<"overview" | "watchList" | "history" | "settings" | "help", string>;
+  sidebar: Record<"primaryNavigation" | "diskHealth" | "good" | "libraryReady" | "recordingPath", string> & { usedOfTotal: (used: string, total: string, percent: number) => string };
   overview: {
     serviceReady: string;
     monitoringPaused: string;
@@ -63,6 +63,19 @@ export interface Translation {
     description: string;
     revealFile: string;
     noFileYet: string;
+  };
+  help: {
+    title: string;
+    description: string;
+    openIssue: string;
+    youtubeTitle: string;
+    youtubeBody: string;
+    startTitle: string;
+    startBody: string;
+    accessTitle: string;
+    accessBody: string;
+    moreTitle: string;
+    moreBody: string;
   };
   settings: {
     title: string;
@@ -147,8 +160,8 @@ export interface Translation {
 }
 
 const english: Translation = {
-  nav: { overview: "Overview", watchList: "Watch list", history: "History", settings: "Settings" },
-  sidebar: { primaryNavigation: "Primary navigation", diskHealth: "Disk health", good: "Good", libraryReady: "Library is ready for recordings", recordingPath: "Recording path" },
+  nav: { overview: "Overview", watchList: "Watch list", history: "History", settings: "Settings", help: "Help" },
+  sidebar: { primaryNavigation: "Primary navigation", diskHealth: "Disk health", good: "Good", libraryReady: "Library is ready for recordings", recordingPath: "Recording path", usedOfTotal: (used, total, percent) => `${used} used of ${total} (${percent}%)` },
   overview: {
     serviceReady: "Recording service is ready", monitoringPaused: "Monitoring is paused",
     recordings: (count) => `${count} recording${count === 1 ? "" : "s"}`,
@@ -165,6 +178,7 @@ const english: Translation = {
   },
   list: { title: "Watch list", description: "Monitor, pause, and check every source from one place.", filterPlaceholder: "Filter by source, URL, or state", sources: (count) => `${count} source${count === 1 ? "" : "s"}` },
   history: { title: "Recording history", description: "Recent completed, cancelled, and failed recording attempts.", revealFile: "Reveal file", noFileYet: "No file yet" },
+  help: { title: "Help", description: "Quick answers for monitoring and recording authorised live streams.", openIssue: "Open an issue", youtubeTitle: "Does it support YouTube livestreams?", youtubeBody: "Yes. Add an authorised YouTube livestream or channel /live URL and Live Downloader will monitor it just like any other supported stream.", startTitle: "When does recording begin?", startBody: "Recording starts when a scheduled check finds the stream available. It captures from that point onward, not the portion broadcast before detection.", accessTitle: "Why is my source still waiting?", accessBody: "Check that the URL is public or that yt-dlp can access it, then use Check now. Only record streams you are authorised to download.", moreTitle: "Need more help?", moreBody: "Open a GitHub issue with the stream platform, an error message, and the steps you tried so we can investigate." },
   settings: {
     title: "Settings", description: "Control the local engine, recording library, appearance, and background behaviour.", appearance: "Appearance", language: "Language", theme: "Theme", useWindowsSetting: "Use Windows setting", dark: "Dark", light: "Light", notifications: "Notifications", notificationsDescription: "Tell me when recording starts, ends, or needs attention.", recordingLibrary: "Recording library", downloadDirectory: "Download directory", keepDiagnostics: "Keep diagnostics", days: (count) => `${count} days`, monitoring: "Monitoring", checkEvery: "Check each source every", seconds: "seconds", concurrentRecordings: "Concurrent recordings", slots: "slots", windowsStartup: "Windows startup", startWithWindows: "Start with Windows", startWithWindowsDescription: "Launch Live Downloader when you sign in.", launchToTray: "Launch to tray", launchToTrayDescription: "Keep the dashboard hidden at sign-in while monitoring is ready.", savedLocally: "Settings were saved locally.",
   },
@@ -178,8 +192,8 @@ const english: Translation = {
 };
 
 const portugueseBrazil: Translation = {
-  nav: { overview: "Visão geral", watchList: "Lista de monitoramento", history: "Histórico", settings: "Configurações" },
-  sidebar: { primaryNavigation: "Navegação principal", diskHealth: "Saúde do disco", good: "Boa", libraryReady: "A biblioteca está pronta para gravações", recordingPath: "Pasta de gravações" },
+  nav: { overview: "Visão geral", watchList: "Lista de monitoramento", history: "Histórico", settings: "Configurações", help: "Ajuda" },
+  sidebar: { primaryNavigation: "Navegação principal", diskHealth: "Saúde do disco", good: "Boa", libraryReady: "A biblioteca está pronta para gravações", recordingPath: "Pasta de gravações", usedOfTotal: (used, total, percent) => `${used} usados de ${total} (${percent}%)` },
   overview: {
     serviceReady: "O serviço de gravação está pronto", monitoringPaused: "O monitoramento está pausado",
     recordings: (count) => `${count} ${count === 1 ? "gravação" : "gravações"}`,
@@ -196,6 +210,7 @@ const portugueseBrazil: Translation = {
   },
   list: { title: "Lista de monitoramento", description: "Monitore, pause e verifique todas as fontes em um só lugar.", filterPlaceholder: "Filtre por fonte, URL ou estado", sources: (count) => `${count} fonte${count === 1 ? "" : "s"}` },
   history: { title: "Histórico de gravações", description: "Tentativas recentes concluídas, canceladas e com falha.", revealFile: "Mostrar arquivo", noFileYet: "Ainda não há arquivo" },
+  help: { title: "Ajuda", description: "Respostas rápidas sobre o monitoramento e a gravação de transmissões ao vivo autorizadas.", openIssue: "Abrir uma issue", youtubeTitle: "O app suporta lives do YouTube?", youtubeBody: "Sim. Adicione uma live autorizada do YouTube ou a URL /live de um canal, e o Live Downloader vai monitorá-la como qualquer outra stream compatível.", startTitle: "Quando a gravação começa?", startBody: "A gravação começa quando uma verificação agendada encontra a stream disponível. Ela é capturada a partir desse momento, não da parte transmitida antes da detecção.", accessTitle: "Por que minha fonte ainda está aguardando?", accessBody: "Confira se a URL é pública ou se o yt-dlp pode acessá-la e use Verificar agora. Grave somente streams que você tem autorização para baixar.", moreTitle: "Precisa de mais ajuda?", moreBody: "Abra uma issue no GitHub com a plataforma, a mensagem de erro e os passos que você tentou para que possamos investigar." },
   settings: {
     title: "Configurações", description: "Controle o mecanismo local, a biblioteca de gravações, a aparência e o funcionamento em segundo plano.", appearance: "Aparência", language: "Idioma", theme: "Tema", useWindowsSetting: "Usar configuração do Windows", dark: "Escuro", light: "Claro", notifications: "Notificações", notificationsDescription: "Avise quando uma gravação iniciar, terminar ou precisar de atenção.", recordingLibrary: "Biblioteca de gravações", downloadDirectory: "Pasta de downloads", keepDiagnostics: "Manter diagnósticos", days: (count) => `${count} dias`, monitoring: "Monitoramento", checkEvery: "Verificar cada fonte a cada", seconds: "segundos", concurrentRecordings: "Gravações simultâneas", slots: "vagas", windowsStartup: "Inicialização do Windows", startWithWindows: "Iniciar com o Windows", startWithWindowsDescription: "Inicie o Live Downloader ao entrar no Windows.", launchToTray: "Iniciar na bandeja", launchToTrayDescription: "Mantenha o painel oculto ao entrar no Windows enquanto o monitoramento está pronto.", savedLocally: "As configurações foram salvas localmente.",
   },

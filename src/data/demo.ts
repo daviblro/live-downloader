@@ -24,6 +24,7 @@ export const demoPayload: BootstrapPayload = {
     nextGlobalCheckAt: at(2),
     sidecarStatus: "Managed yt-dlp sidecar",
   },
+  diskUsage: { totalBytes: 4_000_000_000_000, availableBytes: 2_100_000_000_000 },
   legacyConfigAvailable: true,
   targets: [
     { id: "1", name: "soucarlosdaniel", url: "https://www.twitch.tv/soucarlosdaniel", enabled: true, state: "Recording", statusDetail: "Recording in the background", nextCheckAt: null, lastCheckedAt: at(-1), lastRecordingAt: at(-80), activeJobId: "job-1", createdAt: at(-10000) },

@@ -4,7 +4,7 @@ mod legacy;
 mod models;
 
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -15,7 +15,7 @@ use database::Database;
 use engine::RecordingEngine;
 use legacy::{find_legacy_config, import_legacy_config, is_http_url};
 use models::{
-    AppSettings, BootstrapPayload, CreateTargetInput, EngineSummary, LegacyImportResult,
+    AppSettings, BootstrapPayload, CreateTargetInput, DiskUsage, EngineSummary, LegacyImportResult,
     RecordingJob, UpdateTargetInput, WatchTarget,
 };
 use tauri::{
@@ -32,13 +32,57 @@ pub struct AppState {
 
 #[tauri::command]
 async fn bootstrap(state: State<'_, AppState>) -> Result<BootstrapPayload, String> {
+    let settings = state.database.settings()?;
     Ok(BootstrapPayload {
-        settings: state.database.settings()?,
+        disk_usage: disk_usage_for(Path::new(&settings.download_directory)),
+        settings,
         targets: state.database.list_targets()?,
         jobs: state.database.list_jobs(60)?,
         engine: state.engine.summary()?,
         legacy_config_available: find_legacy_config().is_some(),
     })
+}
+
+fn disk_usage_for(directory: &Path) -> Option<DiskUsage> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::{
+            core::PCWSTR,
+            Win32::Storage::FileSystem::GetDiskFreeSpaceExW,
+        };
+
+        let existing_directory = std::iter::successors(Some(directory), |path| path.parent())
+            .find(|path| path.exists())?;
+        let path: Vec<u16> = existing_directory
+            .as_os_str()
+            .encode_wide()
+            .chain(Some(0))
+            .collect();
+        let mut total_bytes = 0;
+        let mut available_bytes = 0;
+
+        unsafe {
+            GetDiskFreeSpaceExW(
+                PCWSTR(path.as_ptr()),
+                None,
+                Some(&mut total_bytes),
+                Some(&mut available_bytes),
+            )
+            .ok()?;
+        }
+
+        Some(DiskUsage {
+            total_bytes,
+            available_bytes,
+        })
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = directory;
+        None
+    }
 }
 
 #[tauri::command]
