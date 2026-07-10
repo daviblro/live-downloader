@@ -1,7 +1,7 @@
 {
   "name": "live-downloader",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "build:tauri": "tauri build",
     "check": "tsc -b",
+    "version:bump": "node scripts/bump-version.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

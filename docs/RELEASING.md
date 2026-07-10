@@ -8,6 +8,15 @@ Keep the version aligned in `package.json`, `src-tauri/Cargo.toml`, and
 release** workflow validates the version, builds the NSIS installer, and uploads
 it to the matching GitHub Release.
 
+Set all three version fields with one command before creating the release tag:
+
+```powershell
+pnpm version:bump 1.0.3
+```
+
+The command accepts a semantic version (including prerelease and build metadata)
+and reports each updated file. It does not create a commit or Git tag.
+
 The app does not use Tauri's in-place updater. At launch it reads the public
 GitHub Releases API and, if a newer stable release is available, offers a button
 to open that release in the user's browser.
