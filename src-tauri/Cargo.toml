@@ -1,6 +1,6 @@
 [package]
 name = "live-downloader"
-version = "1.0.0"
+version = "1.0.1"
 description = "A resilient desktop recorder for authorised live streams"
 authors = ["Live Downloader contributors"]
 edition = "2021"
