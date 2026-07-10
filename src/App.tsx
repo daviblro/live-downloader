@@ -1,6 +1,7 @@
 import { getVersion } from "@tauri-apps/api/app";
-import { ArrowRight, CircleAlert, Download, ExternalLink, FolderOpen, Import, Menu, Pause, Play, Plus, Search, X } from "lucide-react";
+import { ArrowRight, Download, ExternalLink, FolderOpen, Import, Menu, Pause, Play, Plus, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ToastContainer, toast, type Theme } from "react-toastify";
 import { AddStreamDialog } from "./components/AddStreamDialog";
 import { Inspector } from "./components/Inspector";
 import { Sidebar, type View } from "./components/Sidebar";
@@ -17,6 +18,19 @@ const releasesApiUrl = "https://api.github.com/repos/daviblro/live-downloader/re
 const releasesPageUrl = "https://github.com/daviblro/live-downloader/releases";
 
 type AvailableRelease = { version: string; url: string };
+
+function useToastTheme(theme: AppSettings["theme"]): Theme {
+  const [systemTheme, setSystemTheme] = useState<Theme>(() => window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: light)");
+    const updateTheme = () => setSystemTheme(mediaQuery.matches ? "light" : "dark");
+    mediaQuery.addEventListener("change", updateTheme);
+    return () => mediaQuery.removeEventListener("change", updateTheme);
+  }, []);
+
+  return theme === "system" ? systemTheme : theme;
+}
 
 function ReleaseNotice({ release, onOpen, onDismiss }: { release: AvailableRelease; onOpen: () => void; onDismiss: () => void }) {
   const { translation: t } = useI18n();
@@ -50,12 +64,12 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(demoPayload.targets[0]?.id ?? null);
   const [filter, setFilter] = useState("");
   const [showAdd, setShowAdd] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(isDesktop);
   const [availableRelease, setAvailableRelease] = useState<AvailableRelease | null>(null);
   const [localePreview, setLocalePreview] = useState<Locale | null>(null);
   const locale = localePreview ?? payload.settings.locale;
   const t = translations[locale];
+  const toastTheme = useToastTheme(payload.settings.theme);
   const localeRef = useRef(locale);
 
   useEffect(() => {
@@ -70,7 +84,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    void refresh().catch((reason) => setMessage(String(reason))).finally(() => setLoading(false));
+    void refresh().catch((reason) => toast.error(String(reason), { autoClose: false, closeOnClick: false })).finally(() => setLoading(false));
     if (!isDesktop) return;
     let unlisten: (() => void) | undefined;
     void api.listenEngine((engine) => {
@@ -113,7 +127,12 @@ export default function App() {
   const filteredTargets = useMemo(() => payload.targets.filter((target) => `${target.name} ${target.url} ${target.state}`.toLowerCase().includes(filter.toLowerCase())), [filter, payload.targets]);
 
   async function action(work: () => Promise<void>, success?: string) {
-    try { await work(); if (success) setMessage(success); } catch (reason) { setMessage(reason instanceof Error ? reason.message : String(reason)); }
+    try {
+      await work();
+      if (success) toast.success(success);
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : String(reason), { autoClose: false, closeOnClick: false });
+    }
   }
 
   const updatePayload = (updates: Partial<BootstrapPayload>) => setPayload((current) => ({ ...current, ...updates }));
@@ -141,11 +160,11 @@ export default function App() {
   });
   const pauseAll = () => void action(async () => { if (isDesktop) { await api.pauseAll(); await refresh(); } else updatePayload({ engine: { ...payload.engine, running: false } }); }, t.toast.monitoringPaused);
   const resumeAll = () => void action(async () => { if (isDesktop) { await api.startEngine(); await refresh(); } else updatePayload({ engine: { ...payload.engine, running: true } }); }, t.toast.monitoringResumed);
-  const checkNow = (target: WatchTarget) => void action(async () => { if (isDesktop) { await api.checkNow(target.id); await refresh(); } else setMessage(t.toast.checking(target.name)); });
-  const stopJob = (jobId: string) => void action(async () => { if (isDesktop) { await api.stopRecording(jobId); await refresh(); } else setMessage(t.toast.recordingStopped); }, t.toast.recordingStopping);
+  const checkNow = (target: WatchTarget) => void action(async () => { if (isDesktop) { await api.checkNow(target.id); await refresh(); } else toast.info(t.toast.checking(target.name)); });
+  const stopJob = (jobId: string) => void action(async () => { if (isDesktop) { await api.stopRecording(jobId); await refresh(); } }, t.toast.recordingStopping);
   const removeTarget = (target: WatchTarget) => void action(async () => { if (isDesktop) { await api.removeTarget(target.id); await refresh(); } else setPayload((current) => ({ ...current, targets: current.targets.filter((item) => item.id !== target.id) })); }, t.toast.removed(target.name));
   const toggleTarget = (target: WatchTarget) => void action(async () => { if (isDesktop) { await api.updateTarget({ ...target, enabled: !target.enabled }); await refresh(); } else setPayload((current) => ({ ...current, targets: current.targets.map((item) => item.id === target.id ? { ...item, enabled: !item.enabled, state: !item.enabled ? "Watching" : "Cancelled" } : item) })); });
-  const previewLocale = (nextLocale: Locale) => { setLocalePreview(nextLocale); setMessage(null); };
+  const previewLocale = (nextLocale: Locale) => setLocalePreview(nextLocale);
   const navigate = (nextView: View) => { if (nextView !== "settings") setLocalePreview(null); setView(nextView); };
 
   return <I18nProvider locale={locale}><div className="app-shell">
@@ -158,7 +177,18 @@ export default function App() {
       {view === "settings" && <SettingsPanel settings={payload.settings} onSave={updateSettings} onLocalePreview={previewLocale} />}
     </main>
     <button type="button" className="mobile-menu" onClick={() => navigate(view === "watch-list" ? "overview" : "watch-list")} aria-label={t.common.switchView}><Menu size={20} /></button>
-    {message && <button type="button" className="toast" onClick={() => setMessage(null)}><CircleAlert size={17} />{message}</button>}
+    <ToastContainer
+      aria-label={t.toast.notifications}
+      autoClose={5_000}
+      closeButton={({ closeToast }) => <button type="button" className="toast-close-button" onClick={closeToast} aria-label={t.toast.close}>×</button>}
+      closeOnClick
+      hideProgressBar={false}
+      newestOnTop
+      pauseOnFocusLoss
+      pauseOnHover
+      position="bottom-right"
+      theme={toastTheme}
+    />
     {showAdd && <AddStreamDialog onClose={() => setShowAdd(false)} onSubmit={addStream} />}
   </div></I18nProvider>;
 }
