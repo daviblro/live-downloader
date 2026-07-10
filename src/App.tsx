@@ -1,6 +1,6 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { ArrowRight, CircleAlert, Download, ExternalLink, FolderOpen, Import, Menu, Pause, Play, Plus, Search, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AddStreamDialog } from "./components/AddStreamDialog";
 import { Inspector } from "./components/Inspector";
 import { Sidebar, type View } from "./components/Sidebar";
@@ -56,6 +56,11 @@ export default function App() {
   const [localePreview, setLocalePreview] = useState<Locale | null>(null);
   const locale = localePreview ?? payload.settings.locale;
   const t = translations[locale];
+  const localeRef = useRef(locale);
+
+  useEffect(() => {
+    localeRef.current = locale;
+  }, [locale]);
 
   const refresh = useCallback(async () => {
     if (!isDesktop) return;
@@ -71,14 +76,14 @@ export default function App() {
     void api.listenEngine((engine) => {
       setPayload((current) => {
         if (current.settings.notificationsEnabled && engine.activeRecordings > current.engine.activeRecordings) {
-          void api.notify("Live Downloader", t.toast.recordingStartedBackground);
+          void api.notify("Live Downloader", translations[localeRef.current].toast.recordingStartedBackground);
         }
         return { ...current, engine };
       });
       void refresh();
     }).then((dispose) => { unlisten = dispose; });
     return () => unlisten?.();
-  }, [refresh, t.toast.recordingStartedBackground]);
+  }, [refresh]);
 
   useEffect(() => {
     if (!isDesktop) return;

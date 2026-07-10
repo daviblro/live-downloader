@@ -19,9 +19,8 @@ use models::{
     RecordingJob, UpdateTargetInput, WatchTarget,
 };
 use tauri::{
-    image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
-    tray::{TrayIconBuilder, TrayIconEvent},
+    tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
     Manager, State, WindowEvent,
 };
 
@@ -169,23 +168,6 @@ async fn reveal_recording(job_id: String, state: State<'_, AppState>) -> Result<
     Ok(())
 }
 
-fn tray_icon() -> Image<'static> {
-    let mut rgba = vec![0u8; 32 * 32 * 4];
-    for y in 0..32 {
-        for x in 0..32 {
-            let index = ((y * 32 + x) * 4) as usize;
-            let inside = (x as i32 - 16).pow(2) + (y as i32 - 16).pow(2) < 190;
-            if inside {
-                rgba[index] = 31;
-                rgba[index + 1] = 122;
-                rgba[index + 2] = 255;
-                rgba[index + 3] = 255;
-            }
-        }
-    }
-    Image::new_owned(rgba, 32, 32)
-}
-
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -195,6 +177,10 @@ fn show_main_window(app: &tauri::AppHandle) {
 }
 
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
+    let icon = app
+        .default_window_icon()
+        .cloned()
+        .ok_or_else(|| tauri::Error::AssetNotFound("application icon".into()))?;
     let show = MenuItem::with_id(app, "show", "Show dashboard", true, None::<&str>)?;
     let pause = MenuItem::with_id(app, "pause", "Pause all recordings", true, None::<&str>)?;
     let resume = MenuItem::with_id(app, "resume", "Resume monitoring", true, None::<&str>)?;
@@ -207,9 +193,10 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     )?;
 
     TrayIconBuilder::with_id("main-tray")
-        .icon(tray_icon())
+        .icon(icon)
         .tooltip("Live Downloader")
         .menu(&menu)
+        .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => show_main_window(app),
             "pause" => {
@@ -243,7 +230,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            if matches!(event, TrayIconEvent::Click { .. }) {
+            if matches!(event, TrayIconEvent::Click { button: MouseButton::Left, .. }) {
                 show_main_window(&tray.app_handle());
             }
         })
