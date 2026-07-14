@@ -99,7 +99,7 @@ async fn add_target(
         return Err("Enter an absolute HTTP or HTTPS stream URL.".to_owned());
     }
     let target = state.database.insert_target(name, url)?;
-    let _ = state.engine.start().await;
+    let _ = state.engine.start();
     Ok(target)
 }
 
@@ -129,7 +129,7 @@ async fn remove_target(id: String, state: State<'_, AppState>) -> Result<(), Str
 
 #[tauri::command]
 async fn start_engine(state: State<'_, AppState>) -> Result<EngineSummary, String> {
-    state.engine.start().await
+    state.engine.start()
 }
 
 #[tauri::command]
@@ -184,7 +184,7 @@ async fn import_legacy(state: State<'_, AppState>) -> Result<LegacyImportResult,
         "No legacy config.json was found in the current or parent folder.".to_owned()
     })?;
     let result = import_legacy_config(&state.database, &path)?;
-    let _ = state.engine.start().await;
+    let _ = state.engine.start();
     Ok(result)
 }
 
@@ -266,7 +266,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
             "resume" => {
                 let engine = app.state::<AppState>().engine.clone();
                 tauri::async_runtime::spawn(async move {
-                    let _ = engine.start().await;
+                    let _ = engine.start();
                 });
             }
             "downloads" => {
@@ -329,6 +329,7 @@ pub fn run() {
                     .map_err(std::io::Error::other)?,
             );
             let engine = RecordingEngine::new(app.handle().clone(), database.clone());
+            engine.start().map_err(std::io::Error::other)?;
             app.manage(AppState {
                 database,
                 engine,

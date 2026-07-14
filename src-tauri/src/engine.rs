@@ -120,7 +120,7 @@ impl RecordingEngine {
         Ok(())
     }
 
-    pub async fn start(&self) -> Result<EngineSummary, String> {
+    pub fn start(&self) -> Result<EngineSummary, String> {
         {
             let mut runtime = self
                 .runtime
