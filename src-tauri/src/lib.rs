@@ -33,6 +33,9 @@ pub struct AppState {
 #[tauri::command]
 async fn bootstrap(state: State<'_, AppState>) -> Result<BootstrapPayload, String> {
     let settings = state.database.settings()?;
+    let _ = state
+        .engine
+        .reconcile_output_paths(Path::new(&settings.download_directory));
     Ok(BootstrapPayload {
         disk_usage: disk_usage_for(Path::new(&settings.download_directory)),
         settings,
@@ -47,10 +50,7 @@ fn disk_usage_for(directory: &Path) -> Option<DiskUsage> {
     #[cfg(windows)]
     {
         use std::os::windows::ffi::OsStrExt;
-        use windows::{
-            core::PCWSTR,
-            Win32::Storage::FileSystem::GetDiskFreeSpaceExW,
-        };
+        use windows::{core::PCWSTR, Win32::Storage::FileSystem::GetDiskFreeSpaceExW};
 
         let existing_directory = std::iter::successors(Some(directory), |path| path.parent())
             .find(|path| path.exists())?;
@@ -171,6 +171,10 @@ async fn save_settings(
 
 #[tauri::command]
 async fn list_history(state: State<'_, AppState>) -> Result<Vec<RecordingJob>, String> {
+    let settings = state.database.settings()?;
+    let _ = state
+        .engine
+        .reconcile_output_paths(Path::new(&settings.download_directory));
     state.database.list_jobs(200)
 }
 
@@ -198,10 +202,20 @@ async fn open_download_directory(state: State<'_, AppState>) -> Result<(), Strin
 
 #[tauri::command]
 async fn reveal_recording(job_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let job = state
+    let mut job = state
         .database
         .job(&job_id)?
         .ok_or_else(|| "That recording no longer exists.".to_owned())?;
+    if job.output_path.is_none() {
+        let settings = state.database.settings()?;
+        let _ = state
+            .engine
+            .reconcile_output_paths(Path::new(&settings.download_directory));
+        job = state
+            .database
+            .job(&job_id)?
+            .ok_or_else(|| "That recording no longer exists.".to_owned())?;
+    }
     let path = job
         .output_path
         .ok_or_else(|| "The recording file has not been located yet.".to_owned())?;
@@ -274,8 +288,14 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            if matches!(event, TrayIconEvent::Click { button: MouseButton::Left, .. }) {
-                show_main_window(&tray.app_handle());
+            if matches!(
+                event,
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    ..
+                }
+            ) {
+                show_main_window(tray.app_handle());
             }
         })
         .build(app)?;
@@ -303,8 +323,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .setup(move |app| {
-            let data_directory =
-                application_data_directory().map_err(|error| std::io::Error::other(error))?;
+            let data_directory = application_data_directory().map_err(std::io::Error::other)?;
             let database = Arc::new(
                 Database::open(&data_directory.join("live-downloader.db"))
                     .map_err(std::io::Error::other)?,

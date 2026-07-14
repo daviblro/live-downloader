@@ -330,15 +330,38 @@ impl Database {
             .map_err(|error| error.to_string())
     }
 
-    pub fn finish_job(&self, id: &str, state: &str, message: &str) -> Result<(), String> {
+    pub fn finish_job(
+        &self,
+        id: &str,
+        state: &str,
+        message: &str,
+        output_path: Option<&str>,
+    ) -> Result<(), String> {
         let connection = self
             .connection
             .lock()
             .map_err(|_| "Database lock poisoned".to_owned())?;
         connection
             .execute(
-                "UPDATE recording_jobs SET state = ?2, message = ?3, finished_at = ?4 WHERE id = ?1",
-                params![id, state, message, format_time(now())],
+                "UPDATE recording_jobs
+                 SET state = ?2, message = ?3, finished_at = ?4,
+                     output_path = COALESCE(?5, output_path)
+                 WHERE id = ?1",
+                params![id, state, message, format_time(now()), output_path],
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    pub fn set_job_output_path(&self, id: &str, output_path: &str) -> Result<(), String> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "Database lock poisoned".to_owned())?;
+        connection
+            .execute(
+                "UPDATE recording_jobs SET output_path = ?2 WHERE id = ?1",
+                params![id, output_path],
             )
             .map_err(|error| error.to_string())?;
         Ok(())
@@ -425,12 +448,19 @@ mod tests {
         database
             .set_job_pid(&job.id, 42)
             .expect("pid should persist");
+        let output_path = path.with_extension("mp4");
         database
-            .finish_job(&job.id, "Completed", "Recording completed")
+            .finish_job(
+                &job.id,
+                "Completed",
+                "Recording completed",
+                output_path.to_str(),
+            )
             .expect("job should finish");
         let history = database.list_jobs(10).expect("history should list");
         assert_eq!(history[0].state, "Completed");
         assert_eq!(history[0].process_id, Some(42));
+        assert_eq!(history[0].output_path.as_deref(), output_path.to_str());
 
         drop(database);
         let _ = std::fs::remove_file(&path);
