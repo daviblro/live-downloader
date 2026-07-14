@@ -25,8 +25,8 @@ Microsoft WebView2 is not already installed, Windows downloads it during setup.
   monitoring.
 - Configure the download folder, monitoring limits, notifications, appearance,
   and **Start with Windows** under **Settings**.
-- Recordings are named `channel - dd-mm-yyyy hh-mm-ss.ext`, using Windows-safe
-  separators while keeping the requested day-first date and precise local time.
+- Recordings use `channel - mm-dd-yyyy hh-mm-ss.ext` in English and
+  `channel - dd-mm-yyyy hh-mm-ss.ext` in Portuguese, with Windows-safe separators.
 - Closing the window keeps the recorder available in the system tray; choose
   **Exit Live Downloader** from the tray menu to stop it completely.
 - The app checks GitHub Releases at launch and shows a non-intrusive notice when

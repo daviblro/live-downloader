@@ -6,11 +6,6 @@ export const localeOptions: ReadonlyArray<{ value: Locale; nativeName: string }>
   { value: "pt-BR", nativeName: "Português (Brasil)" },
 ];
 
-export const localeTag: Record<Locale, string> = {
-  en: "en-US",
-  "pt-BR": "pt-BR",
-};
-
 export interface Translation {
   nav: Record<"overview" | "watchList" | "history" | "settings" | "help", string>;
   sidebar: Record<"primaryNavigation" | "diskHealth" | "good" | "libraryReady" | "recordingPath", string> & { usedOfTotal: (used: string, total: string, percent: number) => string };

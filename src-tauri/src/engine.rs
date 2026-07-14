@@ -373,7 +373,9 @@ impl RecordingEngine {
         let output_directory = Path::new(&settings.download_directory);
         std::fs::create_dir_all(output_directory)
             .map_err(|error| format!("Could not create the download directory: {error}"))?;
-        let local_timestamp = Local::now().format("%d-%m-%Y %H-%M-%S").to_string();
+        let local_timestamp = Local::now()
+            .format(recording_timestamp_format(&settings.locale))
+            .to_string();
         let output_template = recording_output_template(output_directory, &local_timestamp);
         let job = self.database.create_job(&target.id, None)?;
         let output_path_receipt =
@@ -562,6 +564,14 @@ fn recording_output_template(output_directory: &Path, local_timestamp: &str) -> 
     output_directory.join(format!("%(channel,uploader)s - {local_timestamp}.%(ext)s"))
 }
 
+fn recording_timestamp_format(locale: &str) -> &'static str {
+    if locale == "pt-BR" {
+        "%d-%m-%Y %H-%M-%S"
+    } else {
+        "%m-%d-%Y %H-%M-%S"
+    }
+}
+
 fn take_output_path_receipt(receipt: &Path) -> Option<PathBuf> {
     let contents = std::fs::read_to_string(receipt).ok();
     let _ = std::fs::remove_file(receipt);
@@ -628,10 +638,12 @@ fn legacy_candidate_score(
     for timestamp in [started_at, finished_at].into_iter().flatten() {
         date_tokens.push(timestamp.format("%Y%m%d").to_string());
         date_tokens.push(timestamp.format("%d%m%Y").to_string());
+        date_tokens.push(timestamp.format("%m%d%Y").to_string());
         time_tokens.push(timestamp.format("%H%M").to_string());
         let local = timestamp.with_timezone(&Local);
         date_tokens.push(local.format("%Y%m%d").to_string());
         date_tokens.push(local.format("%d%m%Y").to_string());
+        date_tokens.push(local.format("%m%d%Y").to_string());
         time_tokens.push(local.format("%H%M").to_string());
     }
 
@@ -752,7 +764,8 @@ mod tests {
 
     use super::{
         bundled_sidecar_directory_from, legacy_candidate_score, normalize_name,
-        recording_output_template, take_output_path_receipt, OutputCandidate,
+        recording_output_template, recording_timestamp_format, take_output_path_receipt,
+        OutputCandidate,
     };
     use crate::models::{RecordingJob, WatchTarget};
 
@@ -774,6 +787,8 @@ mod tests {
             recording_output_template(Path::new(r"C:\Recordings"), "13-07-2026 22-42-15"),
             PathBuf::from(r"C:\Recordings\%(channel,uploader)s - 13-07-2026 22-42-15.%(ext)s")
         );
+        assert_eq!(recording_timestamp_format("en"), "%m-%d-%Y %H-%M-%S");
+        assert_eq!(recording_timestamp_format("pt-BR"), "%d-%m-%Y %H-%M-%S");
     }
 
     #[test]
