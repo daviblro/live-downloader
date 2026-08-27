@@ -35,9 +35,9 @@ export const demoPayload: BootstrapPayload = {
     { id: "6", name: "WanderLens", url: "https://www.youtube.com/@wanderlens/live", enabled: true, state: "Watching", statusDetail: "Waiting for the stream to go live", nextCheckAt: at(6), lastCheckedAt: at(-3), lastRecordingAt: at(-2000), activeJobId: null, createdAt: at(-10000) },
   ],
   jobs: [
-    { id: "job-1", targetId: "1", targetName: "soucarlosdaniel", state: "Recording", startedAt: at(-84), finishedAt: null, outputPath: null, message: "Recording in the background", processId: 4312 },
-    { id: "job-2", targetId: "2", targetName: "Northernlight", state: "Recording", startedAt: at(-61), finishedAt: null, outputPath: null, message: "Recording in the background", processId: 8452 },
-    { id: "job-3", targetId: "3", targetName: "PixelSonic", state: "Recording", startedAt: at(-29), finishedAt: null, outputPath: null, message: "Recording in the background", processId: 6784 },
-    { id: "job-4", targetId: "4", targetName: "RetroRumble", state: "Completed", startedAt: at(-1500), finishedAt: at(-1440), outputPath: "D:\\LiveDownloader\\Recordings\\RetroRumble_20260708.mp4", message: "Recording completed", processId: null },
+    { id: "job-1", targetId: "1", targetName: "soucarlosdaniel", state: "Recording", startedAt: at(-84), finishedAt: null, outputPath: null, fileExists: false, message: "Recording in the background", processId: 4312 },
+    { id: "job-2", targetId: "2", targetName: "Northernlight", state: "Recording", startedAt: at(-61), finishedAt: null, outputPath: null, fileExists: false, message: "Recording in the background", processId: 8452 },
+    { id: "job-3", targetId: "3", targetName: "PixelSonic", state: "Recording", startedAt: at(-29), finishedAt: null, outputPath: null, fileExists: false, message: "Recording in the background", processId: 6784 },
+    { id: "job-4", targetId: "4", targetName: "RetroRumble", state: "Completed", startedAt: at(-1500), finishedAt: at(-1440), outputPath: "D:\\LiveDownloader\\Recordings\\RetroRumble_20260708.mp4", fileExists: false, message: "Recording completed", processId: null },
   ],
 };

@@ -1,9 +1,10 @@
 import { getVersion } from "@tauri-apps/api/app";
-import { ArrowRight, Download, ExternalLink, FolderOpen, Import, Menu, Pause, Play, Plus, Search, X } from "lucide-react";
+import { ArrowRight, Download, ExternalLink, FolderOpen, Import, Menu, Pause, Play, Plus, Search, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ToastContainer, toast, type Theme } from "react-toastify";
 import { AddStreamDialog } from "./components/AddStreamDialog";
 import { HelpPanel } from "./components/HelpPanel";
+import { HistoryTable } from "./components/HistoryTable";
 import { Inspector } from "./components/Inspector";
 import { Sidebar, type View } from "./components/Sidebar";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -11,7 +12,7 @@ import { Avatar, StatusDot } from "./components/StatusDot";
 import { WatchTable } from "./components/WatchTable";
 import { demoPayload } from "./data/demo";
 import { I18nProvider, localizeRuntimeText, translations, useI18n } from "./i18n";
-import { formatDateTime, formatTime } from "./lib/dates";
+import { formatTime } from "./lib/dates";
 import { api, isDesktop } from "./lib/desktop";
 import { displayReleaseVersion, isNewerRelease, type GitHubRelease } from "./lib/releases";
 import type { AppSettings, BootstrapPayload, Locale, RecordingJob, WatchTarget } from "./types";
@@ -167,6 +168,14 @@ export default function App() {
   const resumeAll = () => void action(async () => { if (isDesktop) { await api.startEngine(); await refresh(); } else updatePayload({ engine: { ...payload.engine, running: true } }); }, t.toast.monitoringResumed);
   const checkNow = (target: WatchTarget) => void action(async () => { if (isDesktop) { await api.checkNow(target.id); await refresh(); } else toast.info(t.toast.checking(target.name)); });
   const stopJob = (jobId: string) => void action(async () => { if (isDesktop) { await api.stopRecording(jobId); await refresh(); } }, t.toast.recordingStopping);
+  const clearHistory = () => {
+    if (!window.confirm(t.history.clearConfirmation)) return;
+    void action(async () => {
+      if (isDesktop) { await api.clearHistory(); await refresh(); }
+      else setPayload((current) => ({ ...current, jobs: current.jobs.filter((job) => job.state === "Recording") }));
+    }, t.toast.historyCleared);
+  };
+  const revealRecording = (jobId: string) => void action(async () => { if (isDesktop) await api.revealRecording(jobId); });
   const removeTarget = (target: WatchTarget) => void action(async () => { if (isDesktop) { await api.removeTarget(target.id); await refresh(); } else setPayload((current) => ({ ...current, targets: current.targets.filter((item) => item.id !== target.id) })); }, t.toast.removed(target.name));
   const toggleTarget = (target: WatchTarget) => void action(async () => { if (isDesktop) { await api.updateTarget({ ...target, enabled: !target.enabled }); await refresh(); } else setPayload((current) => ({ ...current, targets: current.targets.map((item) => item.id === target.id ? { ...item, enabled: !item.enabled, state: !item.enabled ? "Watching" : "Cancelled" } : item) })); });
   const previewLocale = (nextLocale: Locale) => setLocalePreview(nextLocale);
@@ -178,7 +187,7 @@ export default function App() {
       {loading && <div className="loading-layer">{t.overview.starting}</div>}
       {view === "overview" && <>{availableRelease && <ReleaseNotice release={availableRelease} onOpen={openAvailableRelease} onDismiss={() => setAvailableRelease(null)} />}<Overview payload={payload} selected={selected} jobs={payload.jobs} onAdd={() => setShowAdd(true)} onCheck={checkNow} onOpenDownloads={openDownloads} onPauseAll={pauseAll} onRemove={removeTarget} onResumeAll={resumeAll} onSelect={(target) => setSelectedId(target.id)} onStop={stopJob} onToggle={toggleTarget} /></>}
       {view === "watch-list" && <section className="list-view"><header className="topbar"><div><h1>{t.list.title}</h1><p>{t.list.description}</p></div><button type="button" className="primary-action" onClick={() => setShowAdd(true)}><Plus size={18} />{t.common.addStream}</button></header><div className="list-toolbar"><label className="search-field"><Search size={17} /><input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={t.list.filterPlaceholder} /></label><span>{t.list.sources(filteredTargets.length)}</span></div><WatchTable targets={filteredTargets} selectedId={selectedId} onSelect={(target) => setSelectedId(target.id)} onCheck={checkNow} onToggle={toggleTarget} onRemove={removeTarget} /></section>}
-      {view === "history" && <section className="history-view"><header className="topbar"><div><h1>{t.history.title}</h1><p>{t.history.description}</p></div><button type="button" className="secondary-action" onClick={openDownloads}><FolderOpen size={16} />{t.common.openDownloads}</button></header><div className="history-list">{payload.jobs.map((job) => <article key={job.id} className="history-row"><Avatar label={job.targetName} /><div className="history-title"><strong>{job.targetName}</strong><span>{formatDateTime(job.startedAt, locale)}</span></div><StatusDot state={job.state} /><p>{localizeRuntimeText(job.message, t)}</p><button type="button" className="quiet-action" disabled={!job.outputPath} onClick={() => isDesktop && void api.revealRecording(job.id)}>{job.outputPath ? t.history.revealFile : t.history.noFileYet}</button></article>)}</div></section>}
+      {view === "history" && <section className="history-view"><header className="topbar"><div><h1>{t.history.title}</h1><p>{t.history.description}</p></div><div className="top-actions"><button type="button" className="secondary-action danger-action" disabled={!payload.jobs.some((job) => job.state !== "Recording")} onClick={clearHistory}><Trash2 size={16} />{t.history.clearHistory}</button><button type="button" className="secondary-action" onClick={openDownloads}><FolderOpen size={16} />{t.common.openDownloads}</button></div></header><div className="history-content"><HistoryTable jobs={payload.jobs} onReveal={revealRecording} /></div></section>}
       {view === "settings" && <SettingsPanel settings={payload.settings} onSave={updateSettings} onLocalePreview={previewLocale} />}
       {view === "help" && <HelpPanel onOpenIssues={() => void action(async () => { if (isDesktop) await api.openUrl(issuesPageUrl); else window.open(issuesPageUrl, "_blank", "noopener,noreferrer"); })} />}
     </main>

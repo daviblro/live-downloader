@@ -281,6 +281,7 @@ impl Database {
                  WHERE jobs.id = ?1",
                 params![id],
                 |row| {
+                    let output_path: Option<String> = row.get(6)?;
                     Ok(RecordingJob {
                         id: row.get(0)?,
                         target_id: row.get(1)?,
@@ -288,7 +289,10 @@ impl Database {
                         state: row.get(3)?,
                         started_at: row.get(4)?,
                         finished_at: row.get(5)?,
-                        output_path: row.get(6)?,
+                        file_exists: output_path
+                            .as_deref()
+                            .is_some_and(|path| Path::new(path).is_file()),
+                        output_path,
                         message: row.get(7)?,
                         process_id: row.get::<_, Option<i64>>(8)?.map(|value| value as u32),
                     })
@@ -313,6 +317,7 @@ impl Database {
             .map_err(|error| error.to_string())?;
         let rows = statement
             .query_map(params![limit as i64], |row| {
+                let output_path: Option<String> = row.get(6)?;
                 Ok(RecordingJob {
                     id: row.get(0)?,
                     target_id: row.get(1)?,
@@ -320,13 +325,26 @@ impl Database {
                     state: row.get(3)?,
                     started_at: row.get(4)?,
                     finished_at: row.get(5)?,
-                    output_path: row.get(6)?,
+                    file_exists: output_path
+                        .as_deref()
+                        .is_some_and(|path| Path::new(path).is_file()),
+                    output_path,
                     message: row.get(7)?,
                     process_id: row.get::<_, Option<i64>>(8)?.map(|value| value as u32),
                 })
             })
             .map_err(|error| error.to_string())?;
         rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn clear_history(&self) -> Result<usize, String> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "Database lock poisoned".to_owned())?;
+        connection
+            .execute("DELETE FROM recording_jobs WHERE state != 'Recording'", [])
             .map_err(|error| error.to_string())
     }
 
@@ -461,9 +479,22 @@ mod tests {
         assert_eq!(history[0].state, "Completed");
         assert_eq!(history[0].process_id, Some(42));
         assert_eq!(history[0].output_path.as_deref(), output_path.to_str());
+        assert!(!history[0].file_exists);
+
+        std::fs::write(&output_path, b"recording").expect("output file should be created");
+        assert!(database.list_jobs(10).expect("history should list")[0].file_exists);
+
+        let active_job = database
+            .create_job(&target.id, None)
+            .expect("active job should start");
+        assert_eq!(database.clear_history().expect("history should clear"), 1);
+        let remaining = database.list_jobs(10).expect("active jobs should remain");
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].id, active_job.id);
 
         drop(database);
         let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&output_path);
         let _ = std::fs::remove_file(path.with_extension("db-shm"));
         let _ = std::fs::remove_file(path.with_extension("db-wal"));
     }

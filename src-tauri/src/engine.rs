@@ -834,6 +834,7 @@ mod tests {
             started_at: "2026-07-13T21:42:15Z".to_owned(),
             finished_at: Some("2026-07-13T22:00:00Z".to_owned()),
             output_path: None,
+            file_exists: false,
             message: "Recording completed".to_owned(),
             process_id: None,
         };

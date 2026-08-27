@@ -40,7 +40,7 @@ async fn bootstrap(state: State<'_, AppState>) -> Result<BootstrapPayload, Strin
         disk_usage: disk_usage_for(Path::new(&settings.download_directory)),
         settings,
         targets: state.database.list_targets()?,
-        jobs: state.database.list_jobs(60)?,
+        jobs: state.database.list_jobs(200)?,
         engine: state.engine.summary()?,
         legacy_config_available: find_legacy_config().is_some(),
     })
@@ -179,6 +179,11 @@ async fn list_history(state: State<'_, AppState>) -> Result<Vec<RecordingJob>, S
 }
 
 #[tauri::command]
+async fn clear_history(state: State<'_, AppState>) -> Result<usize, String> {
+    state.database.clear_history()
+}
+
+#[tauri::command]
 async fn import_legacy(state: State<'_, AppState>) -> Result<LegacyImportResult, String> {
     let path = find_legacy_config().ok_or_else(|| {
         "No legacy config.json was found in the current or parent folder.".to_owned()
@@ -219,6 +224,9 @@ async fn reveal_recording(job_id: String, state: State<'_, AppState>) -> Result<
     let path = job
         .output_path
         .ok_or_else(|| "The recording file has not been located yet.".to_owned())?;
+    if !Path::new(&path).is_file() {
+        return Err("The recording file has been deleted.".to_owned());
+    }
     std::process::Command::new("explorer.exe")
         .args(["/select,", &path])
         .spawn()
@@ -352,6 +360,7 @@ pub fn run() {
             stop_recording,
             save_settings,
             list_history,
+            clear_history,
             import_legacy,
             open_download_directory,
             reveal_recording

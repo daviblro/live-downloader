@@ -70,6 +70,7 @@ pub struct RecordingJob {
     pub started_at: String,
     pub finished_at: Option<String>,
     pub output_path: Option<String>,
+    pub file_exists: bool,
     pub message: String,
     pub process_id: Option<u32>,
 }

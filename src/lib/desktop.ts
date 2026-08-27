@@ -18,6 +18,7 @@ export const api = {
   stopRecording: (jobId: string) => invoke<void>("stop_recording", { jobId }),
   saveSettings: (settings: AppSettings) => invoke<AppSettings>("save_settings", { settings }),
   history: () => invoke<RecordingJob[]>("list_history"),
+  clearHistory: () => invoke<number>("clear_history"),
   importLegacy: () => invoke("import_legacy"),
   openDownloads: () => invoke<void>("open_download_directory"),
   openUrl: (url: string) => openUrl(url),

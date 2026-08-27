@@ -37,6 +37,7 @@ export interface RecordingJob {
   startedAt: string;
   finishedAt: string | null;
   outputPath: string | null;
+  fileExists: boolean;
   message: string;
   processId: number | null;
 }
