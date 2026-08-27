@@ -43,6 +43,9 @@ jobs:
       - name: Validate project versions
         run: pnpm version:check
 
+      - name: Fetch verified sidecars
+        run: pnpm sidecars:fetch
+
       - name: Check frontend formatting
         run: pnpm format:check
 
@@ -71,9 +74,6 @@ jobs:
         run: |
           cargo install cargo-audit --locked
           cargo audit --file src-tauri/Cargo.lock
-
-      - name: Fetch verified sidecars
-        run: pnpm sidecars:fetch
 
       - name: Build NSIS installer
         run: pnpm exec tauri build --bundles nsis
