@@ -20,15 +20,18 @@ jobs:
 
       - uses: pnpm/action-setup@v6
         with:
-          version: 10
+          version: 11.24.0
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.0
+          components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -37,11 +40,40 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Validate project versions
+        run: pnpm version:check
+
+      - name: Check frontend formatting
+        run: pnpm format:check
+
+      - name: Lint frontend
+        run: pnpm lint
+
+      - name: Type-check frontend
+        run: pnpm typecheck
+
+      - name: Test frontend
+        run: pnpm test
+
       - name: Build frontend
         run: pnpm build
 
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+
+      - name: Lint Rust
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
       - name: Test Rust core
         run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Audit Rust dependencies
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit --file src-tauri/Cargo.lock
+
+      - name: Fetch verified sidecars
+        run: pnpm sidecars:fetch
 
       - name: Build NSIS installer
         run: pnpm exec tauri build --bundles nsis
