@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-pub const LATEST_SCHEMA_VERSION: u32 = 2;
+pub const LATEST_SCHEMA_VERSION: u32 = 3;
 
 pub fn run(connection: &mut Connection) -> Result<(), String> {
     connection
@@ -89,6 +89,21 @@ pub fn run(connection: &mut Connection) -> Result<(), String> {
                  CREATE INDEX idx_watch_targets_active_enabled
                     ON watch_targets(deleted_at, enabled, next_check_at);
                  PRAGMA user_version = 2;",
+            )
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())?;
+        version = 2;
+    }
+
+    if version == 2 {
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute_batch(
+                "ALTER TABLE watch_targets ADD COLUMN provider_user_id TEXT;
+                 ALTER TABLE watch_targets ADD COLUMN avatar_url TEXT;
+                 PRAGMA user_version = 3;",
             )
             .map_err(|error| error.to_string())?;
         transaction.commit().map_err(|error| error.to_string())?;

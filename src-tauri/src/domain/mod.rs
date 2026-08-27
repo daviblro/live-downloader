@@ -137,6 +137,8 @@ pub struct WatchTarget {
     pub last_recording_at: Option<String>,
     pub active_job_id: Option<String>,
     pub created_at: String,
+    pub provider_user_id: Option<String>,
+    pub avatar_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -145,6 +147,7 @@ pub struct RecordingJob {
     pub id: String,
     pub target_id: String,
     pub target_name: String,
+    pub target_avatar_url: Option<String>,
     pub state: RecordingState,
     pub started_at: String,
     pub finished_at: Option<String>,
@@ -152,6 +155,12 @@ pub struct RecordingJob {
     pub file_exists: bool,
     pub message: String,
     pub process_id: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TargetMetadata {
+    pub provider_user_id: String,
+    pub avatar_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

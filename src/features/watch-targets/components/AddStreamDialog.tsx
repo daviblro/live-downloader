@@ -1,16 +1,18 @@
 import { X } from "lucide-react";
 import { type FormEvent, useState } from "react";
+import type { WatchTarget } from "../../../shared/contracts";
 import { useI18n } from "../../../shared/i18n";
 
 interface AddStreamDialogProps {
+  target?: WatchTarget;
   onClose: () => void;
   onSubmit: (input: { name: string; url: string }) => Promise<void>;
 }
 
-export function AddStreamDialog({ onClose, onSubmit }: AddStreamDialogProps) {
+export function AddStreamDialog({ target, onClose, onSubmit }: AddStreamDialogProps) {
   const { translation: t } = useI18n();
-  const [name, setName] = useState("");
-  const [url, setUrl] = useState("");
+  const [name, setName] = useState(target?.name ?? "");
+  const [url, setUrl] = useState(target?.url ?? "");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -39,8 +41,8 @@ export function AddStreamDialog({ onClose, onSubmit }: AddStreamDialogProps) {
       >
         <header>
           <div>
-            <h2 id="add-stream-title">{t.dialog.title}</h2>
-            <p>{t.dialog.description}</p>
+            <h2 id="add-stream-title">{target ? t.dialog.editTitle : t.dialog.title}</h2>
+            <p>{target ? t.dialog.editDescription : t.dialog.description}</p>
           </div>
           <button
             type="button"
@@ -82,7 +84,13 @@ export function AddStreamDialog({ onClose, onSubmit }: AddStreamDialogProps) {
               {t.common.cancel}
             </button>
             <button className="primary-action" disabled={submitting}>
-              {submitting ? t.dialog.adding : t.common.addStream}
+              {submitting
+                ? target
+                  ? t.common.saving
+                  : t.dialog.adding
+                : target
+                  ? t.common.saveChanges
+                  : t.common.addStream}
             </button>
           </footer>
         </form>

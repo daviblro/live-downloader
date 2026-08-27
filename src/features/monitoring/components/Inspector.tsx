@@ -25,7 +25,7 @@ export function Inspector({ target, job, onPause, onStop, onOpen }: InspectorPro
     <aside className="inspector">
       <h2>{t.inspector.recordingActivity}</h2>
       <div className="inspector-source">
-        <Avatar label={target.name} index={0} />
+        <Avatar label={target.name} colorKey={target.id} imageUrl={target.avatarUrl} />
         <div>
           <strong>{target.name}</strong>
           <span>{new URL(target.url).hostname.replace("www.", "")}</span>

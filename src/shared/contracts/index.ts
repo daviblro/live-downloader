@@ -27,12 +27,15 @@ export interface WatchTarget {
   lastRecordingAt: string | null;
   activeJobId: string | null;
   createdAt: string;
+  providerUserId: string | null;
+  avatarUrl: string | null;
 }
 
 export interface RecordingJob {
   id: string;
   targetId: string;
   targetName: string;
+  targetAvatarUrl: string | null;
   state: RecordingState;
   startedAt: string;
   finishedAt: string | null;
@@ -40,6 +43,25 @@ export interface RecordingJob {
   fileExists: boolean;
   message: string;
   processId: number | null;
+}
+
+export interface TwitchStatus {
+  available: boolean;
+  connected: boolean;
+  login: string | null;
+}
+
+export interface TwitchDeviceAuthorization {
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  expiresIn: number;
+  interval: number;
+}
+
+export interface TwitchConnectResult {
+  connected: boolean;
+  login: string | null;
 }
 
 export interface EngineSummary {

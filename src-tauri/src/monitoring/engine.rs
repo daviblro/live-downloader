@@ -947,11 +947,14 @@ mod tests {
             last_recording_at: None,
             active_job_id: None,
             created_at: "2026-07-13T00:00:00Z".to_owned(),
+            provider_user_id: None,
+            avatar_url: None,
         };
         let job = RecordingJob {
             id: "job-1".to_owned(),
             target_id: target.id.clone(),
             target_name: target.name.clone(),
+            target_avatar_url: None,
             state: RecordingState::Completed,
             started_at: "2026-07-13T21:42:15Z".to_owned(),
             finished_at: Some("2026-07-13T22:00:00Z".to_owned()),

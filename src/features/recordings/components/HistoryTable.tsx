@@ -51,13 +51,17 @@ export function HistoryTable({
             </tr>
           </thead>
           <tbody>
-            {visibleJobs.map((job, index) => {
+            {visibleJobs.map((job) => {
               const deleted = Boolean(job.outputPath) && !job.fileExists;
               return (
                 <tr key={job.id}>
                   <td>
                     <div className="source-cell">
-                      <Avatar label={job.targetName} index={index} />
+                      <Avatar
+                        label={job.targetName}
+                        colorKey={job.targetId}
+                        imageUrl={job.targetAvatarUrl}
+                      />
                       <div>
                         <strong>{job.targetName}</strong>
                       </div>

@@ -15,6 +15,8 @@ jobs:
     name: Windows build and test
     runs-on: windows-latest
     timeout-minutes: 25
+    env:
+      TWITCH_CLIENT_ID: ${{ vars.TWITCH_CLIENT_ID || secrets.TWITCH_CLIENT_ID }}
     steps:
       - uses: actions/checkout@v7
 

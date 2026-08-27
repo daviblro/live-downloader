@@ -15,6 +15,12 @@
         },
         {
           "url": "https://github.com/daviblro/live-downloader/releases/**"
+        },
+        {
+          "url": "https://www.twitch.tv/activate"
+        },
+        {
+          "url": "https://www.twitch.tv/activate?device-code=*"
         }
       ]
     }

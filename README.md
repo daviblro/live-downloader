@@ -25,6 +25,9 @@ Microsoft WebView2 is not already installed, Windows downloads it during setup.
   monitoring.
 - Configure the download folder, monitoring limits, notifications, appearance,
   and **Start with Windows** under **Settings**.
+- Optionally select **Connect Twitch** under **Settings** to use Twitch channel
+  profile pictures. Monitoring and recording continue to work without a Twitch
+  connection.
 - Recordings use `channel - mm-dd-yyyy hh-mm-ss.ext` in English and
   `channel - dd-mm-yyyy hh-mm-ss.ext` in Portuguese, with Windows-safe separators.
 - Closing the window keeps the recorder available in the system tray; choose
@@ -35,3 +38,19 @@ Microsoft WebView2 is not already installed, Windows downloads it during setup.
 
 Only record streams you are authorised to capture. See
 [third-party notices](THIRD_PARTY_NOTICES.md) for bundled-component licensing.
+
+## Twitch integration for builds
+
+Twitch connection uses the public Device Code Flow and does not embed a client
+secret. Register a public application in the Twitch Developer Console, then set
+`TWITCH_CLIENT_ID` while compiling the Tauri application:
+
+```powershell
+$env:TWITCH_CLIENT_ID = "your-public-client-id"
+pnpm exec tauri build
+```
+
+Release and validation workflows read the same value from a repository-level
+GitHub Actions variable named `TWITCH_CLIENT_ID`, falling back to a secret with
+the same name. If both are absent, the app builds normally and shows the optional
+Twitch connection as unavailable.

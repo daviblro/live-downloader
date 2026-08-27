@@ -11,6 +11,7 @@ interface WatchListPageProps {
   onAdd: () => void;
   onSelect: (target: WatchTarget) => void;
   onCheck: (target: WatchTarget) => void;
+  onEdit: (target: WatchTarget) => void;
   onToggle: (target: WatchTarget) => void;
   onRemove: (target: WatchTarget) => void;
 }
@@ -23,6 +24,7 @@ export function WatchListPage({
   onAdd,
   onSelect,
   onCheck,
+  onEdit,
   onToggle,
   onRemove,
 }: WatchListPageProps) {
@@ -55,6 +57,7 @@ export function WatchListPage({
         selectedId={selectedId}
         onSelect={onSelect}
         onCheck={onCheck}
+        onEdit={onEdit}
         onToggle={onToggle}
         onRemove={onRemove}
       />

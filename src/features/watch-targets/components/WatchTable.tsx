@@ -1,4 +1,4 @@
-import { Ellipsis, Pause, Play, RefreshCw, Trash2 } from "lucide-react";
+import { Ellipsis, Pause, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { formatDateTime } from "../../../shared/lib/dates";
 import { Avatar } from "../../../shared/components/Avatar";
@@ -11,6 +11,7 @@ interface WatchTableProps {
   selectedId: string | null;
   onSelect: (target: WatchTarget) => void;
   onCheck: (target: WatchTarget) => void;
+  onEdit: (target: WatchTarget) => void;
   onToggle: (target: WatchTarget) => void;
   onRemove: (target: WatchTarget) => void;
 }
@@ -20,6 +21,7 @@ export function WatchTable({
   selectedId,
   onSelect,
   onCheck,
+  onEdit,
   onToggle,
   onRemove,
 }: WatchTableProps) {
@@ -46,7 +48,7 @@ export function WatchTable({
           </tr>
         </thead>
         <tbody>
-          {targets.map((target, index) => {
+          {targets.map((target) => {
             const recording = target.state === "Recording";
             return (
               <tr
@@ -56,7 +58,7 @@ export function WatchTable({
               >
                 <td>
                   <div className="source-cell">
-                    <Avatar label={target.name} index={index} />
+                    <Avatar label={target.name} colorKey={target.id} imageUrl={target.avatarUrl} />
                     <div>
                       <strong>{target.name}</strong>
                       <span>{new URL(target.url).hostname.replace("www.", "")}</span>
@@ -75,6 +77,14 @@ export function WatchTable({
                     className="row-actions row-actions-inline"
                     onClick={(event) => event.stopPropagation()}
                   >
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={t.common.editSource(target.name)}
+                      onClick={() => onEdit(target)}
+                    >
+                      <Pencil size={16} />
+                    </button>
                     <button
                       type="button"
                       className="icon-button"
@@ -134,6 +144,17 @@ export function WatchTable({
                         role="group"
                         aria-label={`${t.common.actions}: ${target.name}`}
                       >
+                        <button
+                          type="button"
+                          className="icon-button"
+                          aria-label={t.common.editSource(target.name)}
+                          onClick={() => {
+                            setOpenActionsId(null);
+                            onEdit(target);
+                          }}
+                        >
+                          <Pencil size={16} />
+                        </button>
                         <button
                           type="button"
                           className="icon-button"
