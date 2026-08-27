@@ -6,18 +6,17 @@
   "platforms": ["windows"],
   "permissions": [
     "core:default",
-    "autostart:allow-enable",
-    "autostart:allow-disable",
-    "autostart:allow-is-enabled",
     "notification:default",
     {
       "identifier": "opener:allow-open-url",
       "allow": [
         {
           "url": "https://github.com/daviblro/live-downloader/issues/new/choose"
+        },
+        {
+          "url": "https://github.com/daviblro/live-downloader/releases/**"
         }
       ]
-    },
-    "opener:allow-reveal-item-in-dir"
+    }
   ]
 }

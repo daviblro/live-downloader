@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use url::Url;
 
-use crate::{database::Database, models::LegacyImportResult};
+use crate::{domain::LegacyImportResult, persistence::Database};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]

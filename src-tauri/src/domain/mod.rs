@@ -1,25 +1,107 @@
 use chrono::{DateTime, Utc};
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Theme {
+    System,
+    Light,
+    Dark,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Locale {
+    #[serde(rename = "en")]
+    English,
+    #[serde(rename = "pt-BR")]
+    PortugueseBrazil,
+}
+
+impl Locale {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::English => "en",
+            Self::PortugueseBrazil => "pt-BR",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TargetState {
+    Watching,
+    Checking,
+    Recording,
+    Queued,
+    Retrying,
+    #[serde(rename = "Needs attention")]
+    NeedsAttention,
+    Disabled,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RecordingState {
+    Recording,
+    Completed,
+    Failed,
+    Cancelled,
+    Interrupted,
+}
+
+fn parse_state<T>(value: ValueRef<'_>, parse: impl FnOnce(&str) -> Option<T>) -> FromSqlResult<T> {
+    let text = value.as_str()?;
+    parse(text).ok_or_else(|| {
+        FromSqlError::Other(Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Unknown persisted state: {text}"),
+        )))
+    })
+}
+
+impl FromSql for TargetState {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        parse_state(value, |value| match value {
+            "Watching" => Some(Self::Watching),
+            "Checking" => Some(Self::Checking),
+            "Recording" => Some(Self::Recording),
+            "Queued" => Some(Self::Queued),
+            "Retrying" => Some(Self::Retrying),
+            "Needs attention" => Some(Self::NeedsAttention),
+            "Disabled" => Some(Self::Disabled),
+            _ => None,
+        })
+    }
+}
+
+impl FromSql for RecordingState {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        parse_state(value, |value| match value {
+            "Recording" => Some(Self::Recording),
+            "Completed" => Some(Self::Completed),
+            "Failed" => Some(Self::Failed),
+            "Cancelled" => Some(Self::Cancelled),
+            "Interrupted" => Some(Self::Interrupted),
+            _ => None,
+        })
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     #[serde(default = "default_locale")]
-    pub locale: String,
-    pub theme: String,
+    pub locale: Locale,
+    pub theme: Theme,
     pub download_directory: String,
     pub probe_interval_seconds: u64,
-    pub max_concurrent_probes: usize,
     pub max_concurrent_recordings: usize,
-    pub launch_to_tray: bool,
     pub start_with_windows: bool,
     pub notifications_enabled: bool,
-    pub retain_logs_days: u16,
     pub external_ytdlp_path: Option<String>,
 }
 
-fn default_locale() -> String {
-    "en".to_owned()
+fn default_locale() -> Locale {
+    Locale::English
 }
 
 impl Default for AppSettings {
@@ -30,15 +112,12 @@ impl Default for AppSettings {
 
         Self {
             locale: default_locale(),
-            theme: "system".to_owned(),
+            theme: Theme::System,
             download_directory: download_directory.to_string_lossy().to_string(),
             probe_interval_seconds: 300,
-            max_concurrent_probes: 6,
             max_concurrent_recordings: 3,
-            launch_to_tray: true,
             start_with_windows: false,
             notifications_enabled: true,
-            retain_logs_days: 30,
             external_ytdlp_path: None,
         }
     }
@@ -51,7 +130,7 @@ pub struct WatchTarget {
     pub name: String,
     pub url: String,
     pub enabled: bool,
-    pub state: String,
+    pub state: TargetState,
     pub status_detail: String,
     pub next_check_at: Option<String>,
     pub last_checked_at: Option<String>,
@@ -66,7 +145,7 @@ pub struct RecordingJob {
     pub id: String,
     pub target_id: String,
     pub target_name: String,
-    pub state: String,
+    pub state: RecordingState,
     pub started_at: String,
     pub finished_at: Option<String>,
     pub output_path: Option<String>,

@@ -1,6 +1,8 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
+    future::Future,
     path::{Path, PathBuf},
+    pin::Pin,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -11,30 +13,24 @@ use tauri_plugin_shell::{process::CommandEvent, ShellExt};
 use tokio::{process::Command, sync::Semaphore};
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    database::Database,
-    legacy::is_http_url,
-    models::{format_time, now, AppSettings, EngineSummary, RecordingJob, WatchTarget},
+use super::{
+    probe::{classify_probe_output, ProbeOutcome, MAX_CONCURRENT_PROBES},
+    recorder::ActiveJob,
+    scheduler::EngineRuntime,
 };
-
-#[derive(Debug)]
-struct ActiveJob {
-    target_id: String,
-    cancellation: CancellationToken,
-}
+use crate::{
+    domain::{
+        format_time, now, AppSettings, EngineSummary, RecordingJob, RecordingState, WatchTarget,
+    },
+    legacy::is_http_url,
+    persistence::Database,
+};
 
 #[derive(Debug)]
 struct OutputCandidate {
     path: PathBuf,
     normalized_name: String,
     modified_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Default)]
-struct EngineRuntime {
-    running: bool,
-    scheduler_started: bool,
-    active_jobs: HashMap<String, ActiveJob>,
 }
 
 #[derive(Clone)]
@@ -51,12 +47,12 @@ impl RecordingEngine {
             app,
             database,
             runtime: Arc::new(Mutex::new(EngineRuntime::default())),
-            probe_limiter: Arc::new(Semaphore::new(12)),
+            probe_limiter: Arc::new(Semaphore::new(MAX_CONCURRENT_PROBES)),
         }
     }
 
-    pub fn database(&self) -> Arc<Database> {
-        self.database.clone()
+    pub fn settings_changed(&self) {
+        self.emit_change();
     }
 
     pub fn summary(&self) -> Result<EngineSummary, String> {
@@ -96,7 +92,8 @@ impl RecordingEngine {
         candidates.retain(|candidate| !assigned_paths.contains(&candidate.path));
 
         for job in jobs.iter().filter(|job| {
-            job.state == "Completed" && job.output_path.as_deref().map_or(true, str::is_empty)
+            job.state == RecordingState::Completed
+                && job.output_path.as_deref().map_or(true, str::is_empty)
         }) {
             let Some(target) = self.database.target(&job.target_id)? else {
                 continue;
@@ -144,6 +141,7 @@ impl RecordingEngine {
                 .lock()
                 .map_err(|_| "Engine lock poisoned".to_owned())?;
             runtime.running = false;
+            runtime.queued_targets.clear();
             runtime
                 .active_jobs
                 .values()
@@ -188,7 +186,10 @@ impl RecordingEngine {
             .runtime
             .lock()
             .ok()
-            .map(|runtime| {
+            .map(|mut runtime| {
+                runtime.queued_targets.retain(|queued| queued != target_id);
+                runtime.probing_targets.remove(target_id);
+                runtime.starting_targets.remove(target_id);
                 runtime
                     .active_jobs
                     .values()
@@ -232,11 +233,23 @@ impl RecordingEngine {
     }
 
     async fn probe_target(&self, target: WatchTarget) {
+        if !self.reserve_probe(&target.id) {
+            return;
+        }
+        let target_id = target.id.clone();
+        self.probe_target_reserved(target).await;
+        if let Ok(mut runtime) = self.runtime.lock() {
+            runtime.probing_targets.remove(&target_id);
+        }
+        self.drain_queue();
+    }
+
+    async fn probe_target_reserved(&self, target: WatchTarget) {
         let permit = match self.probe_limiter.clone().acquire_owned().await {
             Ok(permit) => permit,
             Err(_) => return,
         };
-        if self.has_active_job(&target.id) {
+        if self.has_active_or_starting_job(&target.id) {
             drop(permit);
             return;
         }
@@ -261,7 +274,7 @@ impl RecordingEngine {
             tokio::time::timeout(Duration::from_secs(30), self.probe(&settings, &target.url)).await;
         drop(permit);
         match probe_result {
-            Ok(Ok(true)) => {
+            Ok(Ok(ProbeOutcome::Live)) => {
                 let target_id = target.id.clone();
                 if let Err(error) = self.start_recording(target, settings).await {
                     let _ = self.database.set_target_status(
@@ -274,7 +287,7 @@ impl RecordingEngine {
                     self.emit_change();
                 }
             }
-            Ok(Ok(false)) => {
+            Ok(Ok(ProbeOutcome::Offline)) => {
                 let _ = self.database.set_target_status(
                     &target.id,
                     "Watching",
@@ -284,7 +297,7 @@ impl RecordingEngine {
                 );
                 self.emit_change();
             }
-            Ok(Err(error)) => {
+            Ok(Ok(ProbeOutcome::Failed(error))) | Ok(Err(error)) => {
                 let _ = self.database.set_target_status(
                     &target.id,
                     "Needs attention",
@@ -307,7 +320,7 @@ impl RecordingEngine {
         }
     }
 
-    async fn probe(&self, settings: &AppSettings, url: &str) -> Result<bool, String> {
+    async fn probe(&self, settings: &AppSettings, url: &str) -> Result<ProbeOutcome, String> {
         if !is_http_url(url) {
             return Err("The stream URL must be an absolute HTTP or HTTPS URL.".to_owned());
         }
@@ -330,7 +343,11 @@ impl RecordingEngine {
                     .output()
                     .await
                     .map_err(|error| format!("Could not run managed yt-dlp: {error}"))?;
-                Ok(output.status.success())
+                Ok(classify_probe_output(
+                    output.status.success(),
+                    &output.stdout,
+                    &output.stderr,
+                ))
             }
             CommandSource::External(path) => {
                 let output = Command::new(path)
@@ -340,7 +357,11 @@ impl RecordingEngine {
                     .map_err(|error| {
                         format!("Could not run the configured yt-dlp executable: {error}")
                     })?;
-                Ok(output.status.success())
+                Ok(classify_probe_output(
+                    output.status.success(),
+                    &output.stdout,
+                    &output.stderr,
+                ))
             }
         }
     }
@@ -350,17 +371,37 @@ impl RecordingEngine {
         target: WatchTarget,
         settings: AppSettings,
     ) -> Result<(), String> {
-        let source = self.command_source(&settings)?;
-        let active_count = self
-            .runtime
-            .lock()
-            .map_err(|_| "Engine lock poisoned".to_owned())?
-            .active_jobs
-            .len();
-        if active_count >= settings.max_concurrent_recordings.max(1) {
+        let target_id = target.id.clone();
+        let queued = {
+            let mut runtime = self
+                .runtime
+                .lock()
+                .map_err(|_| "Engine lock poisoned".to_owned())?;
+            let already_active = runtime
+                .active_jobs
+                .values()
+                .any(|job| job.target_id == target_id)
+                || runtime.starting_targets.contains(&target_id);
+            if already_active {
+                return Ok(());
+            }
+            if runtime.active_jobs.len() + runtime.starting_targets.len()
+                >= settings.max_concurrent_recordings.max(1)
+            {
+                if !runtime.queued_targets.contains(&target_id) {
+                    runtime.queued_targets.push_back(target_id.clone());
+                }
+                true
+            } else {
+                runtime.starting_targets.insert(target_id.clone());
+                false
+            }
+        };
+
+        if queued {
             let next_check = format_time(now() + ChronoDuration::seconds(30));
             self.database.set_target_status(
-                &target.id,
+                &target_id,
                 "Queued",
                 "Waiting for a recording slot",
                 Some(&next_check),
@@ -370,11 +411,27 @@ impl RecordingEngine {
             return Ok(());
         }
 
+        let result = self.start_recording_reserved(target, settings).await;
+        if result.is_err() {
+            if let Ok(mut runtime) = self.runtime.lock() {
+                runtime.starting_targets.remove(&target_id);
+            }
+        }
+        result
+    }
+
+    async fn start_recording_reserved(
+        &self,
+        target: WatchTarget,
+        settings: AppSettings,
+    ) -> Result<(), String> {
+        let source = self.command_source(&settings)?;
+
         let output_directory = Path::new(&settings.download_directory);
         std::fs::create_dir_all(output_directory)
             .map_err(|error| format!("Could not create the download directory: {error}"))?;
         let local_timestamp = Local::now()
-            .format(recording_timestamp_format(&settings.locale))
+            .format(recording_timestamp_format(settings.locale.as_str()))
             .to_string();
         let output_template = recording_output_template(output_directory, &local_timestamp);
         let job = self.database.create_job(&target.id, None)?;
@@ -464,17 +521,19 @@ impl RecordingEngine {
         _pid: u32,
         cancellation: CancellationToken,
     ) -> Result<(), String> {
-        self.runtime
+        let mut runtime = self
+            .runtime
             .lock()
-            .map_err(|_| "Engine lock poisoned".to_owned())?
-            .active_jobs
-            .insert(
-                job.id.clone(),
-                ActiveJob {
-                    target_id: target.id.clone(),
-                    cancellation,
-                },
-            );
+            .map_err(|_| "Engine lock poisoned".to_owned())?;
+        runtime.starting_targets.remove(&target.id);
+        runtime.active_jobs.insert(
+            job.id.clone(),
+            ActiveJob {
+                target_id: target.id.clone(),
+                cancellation,
+            },
+        );
+        drop(runtime);
         self.database.set_target_status(
             &target.id,
             "Recording",
@@ -509,16 +568,79 @@ impl RecordingEngine {
             runtime.active_jobs.remove(&job.id);
         }
         self.emit_change();
+        self.drain_queue();
     }
 
-    fn has_active_job(&self, target_id: &str) -> bool {
+    fn drain_queue(&self) {
+        let Ok(settings) = self.database.settings() else {
+            return;
+        };
+        let target_ids = {
+            let mut runtime = match self.runtime.lock() {
+                Ok(runtime) => runtime,
+                Err(_) => return,
+            };
+            if !runtime.running {
+                return;
+            }
+            let available = settings
+                .max_concurrent_recordings
+                .max(1)
+                .saturating_sub(runtime.active_jobs.len() + runtime.starting_targets.len());
+            (0..available)
+                .filter_map(|_| runtime.queued_targets.pop_front())
+                .collect::<Vec<_>>()
+        };
+        for target_id in target_ids {
+            let Ok(Some(target)) = self.database.target(&target_id) else {
+                continue;
+            };
+            if target.enabled {
+                self.spawn_probe(target);
+            }
+        }
+    }
+
+    fn spawn_probe(&self, target: WatchTarget) {
+        let engine = self.clone();
+        let future: Pin<Box<dyn Future<Output = ()> + Send>> =
+            Box::pin(async move { engine.probe_target(target).await });
+        tauri::async_runtime::spawn(future);
+    }
+
+    fn reserve_probe(&self, target_id: &str) -> bool {
+        self.runtime
+            .lock()
+            .map(|mut runtime| {
+                let busy = runtime.probing_targets.contains(target_id)
+                    || runtime.starting_targets.contains(target_id)
+                    || runtime
+                        .queued_targets
+                        .iter()
+                        .any(|queued| queued == target_id)
+                    || runtime
+                        .active_jobs
+                        .values()
+                        .any(|job| job.target_id == target_id);
+                if busy {
+                    false
+                } else {
+                    runtime.probing_targets.insert(target_id.to_owned());
+                    true
+                }
+            })
+            .unwrap_or(false)
+    }
+
+    fn has_active_or_starting_job(&self, target_id: &str) -> bool {
         self.runtime
             .lock()
             .map(|runtime| {
-                runtime
-                    .active_jobs
-                    .values()
-                    .any(|job| job.target_id == target_id)
+                runtime.starting_targets.contains(target_id)
+                    || runtime
+                        .active_jobs
+                        .values()
+                        .any(|job| job.target_id == target_id)
             })
             .unwrap_or(false)
     }
@@ -767,7 +889,7 @@ mod tests {
         recording_output_template, recording_timestamp_format, take_output_path_receipt,
         OutputCandidate,
     };
-    use crate::models::{RecordingJob, WatchTarget};
+    use crate::domain::{RecordingJob, RecordingState, TargetState, WatchTarget};
 
     #[test]
     fn resolves_the_same_sidecar_directory_as_tauri_shell() {
@@ -818,7 +940,7 @@ mod tests {
             name: "Reage Carlos".to_owned(),
             url: "https://www.twitch.tv/soucarlosdaniel".to_owned(),
             enabled: true,
-            state: "Watching".to_owned(),
+            state: TargetState::Watching,
             status_detail: String::new(),
             next_check_at: None,
             last_checked_at: None,
@@ -830,7 +952,7 @@ mod tests {
             id: "job-1".to_owned(),
             target_id: target.id.clone(),
             target_name: target.name.clone(),
-            state: "Completed".to_owned(),
+            state: RecordingState::Completed,
             started_at: "2026-07-13T21:42:15Z".to_owned(),
             finished_at: Some("2026-07-13T22:00:00Z".to_owned()),
             output_path: None,
