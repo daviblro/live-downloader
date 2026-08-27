@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Live Downloader",
-  "version": "1.0.5",
+  "version": "../package.json",
   "identifier": "app.livedownloader.desktop",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "pnpm dev",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -33,11 +33,7 @@
     "icon": ["icons/icon.ico", "icons/icon.png"],
     "shortDescription": "Record authorised live streams automatically",
     "longDescription": "A local Windows application that monitors approved stream URLs and records them when live.",
-    "externalBin": [
-      "binaries/yt-dlp",
-      "binaries/ffmpeg",
-      "binaries/ffprobe"
-    ],
+    "externalBin": ["binaries/yt-dlp", "binaries/ffmpeg", "binaries/ffprobe"],
     "resources": [
       "resources/third-party/ffmpeg/LICENSE",
       "resources/third-party/ffmpeg/README.txt"

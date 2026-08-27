@@ -1,0 +1,14 @@
+{
+  "targetTriple": "x86_64-pc-windows-msvc",
+  "ytDlp": {
+    "version": "2026.06.09",
+    "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.06.09/yt-dlp.exe",
+    "sha256": "3a48cb955d55c8821b60ccbdbbc6f61bc958f2f3d3b7ad5eaf3d83a543293a27"
+  },
+  "ffmpeg": {
+    "version": "9.0",
+    "build": "GyanD essentials_build",
+    "url": "https://github.com/GyanD/codexffmpeg/releases/download/9.0/ffmpeg-9.0-essentials_build.zip",
+    "sha256": "e6b54767a6065919048f1a098eb27211ca4e12b4348a05d88777a5855d0b6e71"
+  }
+}
