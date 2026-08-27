@@ -3,7 +3,8 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const version = process.argv[2];
-const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const semverPattern =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 if (!version || !semverPattern.test(version)) {
   console.error("Usage: pnpm version:bump <semver>");
@@ -20,11 +21,6 @@ if (!version || !semverPattern.test(version)) {
     {
       path: "src-tauri/Cargo.toml",
       pattern: /^(version = ")[^"]+("$)/m,
-      replacement: `$1${version}$2`,
-    },
-    {
-      path: "src-tauri/tauri.conf.json",
-      pattern: /^(  "version": ")[^"]+(",)$/m,
       replacement: `$1${version}$2`,
     },
   ];
