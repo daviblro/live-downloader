@@ -2,13 +2,13 @@
 
 ## Version and tag
 
-Keep the version aligned in `package.json`, `src-tauri/Cargo.toml`, and
-`src-tauri/tauri.conf.json`. Create an annotated Git tag named `v<version>` from
+Keep the version aligned in `package.json` and `src-tauri/Cargo.toml` (the Tauri
+configuration reads `package.json` directly). Create an annotated Git tag named `v<version>` from
 `main` (for example, `v1.0.0`) and push it to GitHub. The **Publish Windows
 release** workflow validates the version, builds the NSIS installer, and uploads
 it to the matching GitHub Release.
 
-Set all three version fields with one command before creating the release tag:
+Set both version fields with one command before creating the release tag:
 
 ```powershell
 pnpm version:bump 1.0.3
@@ -26,7 +26,7 @@ to open that release in the user's browser.
 Prerequisites:
 
 - Windows 10/11 x64 build host with the Rust MSVC toolchain and Node.js.
-- Managed executables at `src-tauri/binaries/` for yt-dlp, FFmpeg, and FFprobe.
+- Internet access to fetch the pinned, checksum-verified sidecars.
 - A review of [`../THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) whenever a
   bundled sidecar changes.
 
@@ -34,6 +34,8 @@ Build and inspect the per-user NSIS installer:
 
 ```powershell
 pnpm install --frozen-lockfile
+pnpm version:check
+pnpm sidecars:fetch
 pnpm build
 cargo test --manifest-path src-tauri/Cargo.toml
 pnpm exec tauri build --bundles nsis
@@ -66,6 +68,6 @@ material only in GitHub Actions secrets; never commit it.
 
 The installer packages the Gyan.dev 64-bit static essentials build of FFmpeg and
 FFprobe and passes its deployed directory to yt-dlp through `--ffmpeg-location`.
-Update the target-triple binaries, GPL/source resource files, and
+Update `tools/sidecars.json`, GPL/source resource files, and
 [`../THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) together. Do not package
 `ffplay`, the FFmpeg documentation tree, presets, or unrelated legacy binaries.
