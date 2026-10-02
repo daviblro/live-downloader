@@ -5,3 +5,4 @@ pub(crate) mod recordings;
 pub(crate) mod settings;
 pub(crate) mod targets;
 pub(crate) mod twitch;
+pub(crate) mod updates;

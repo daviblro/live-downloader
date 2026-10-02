@@ -158,6 +158,13 @@ export interface Translation {
     description: string;
     viewRelease: string;
     dismiss: string;
+    installableDescription: string;
+    updateNow: string;
+    updating: string;
+    downloading: (percent: number | null) => string;
+    installing: string;
+    failed: (message: string) => string;
+    recordingsActiveConfirmation: (count: number) => string;
   };
   toast: {
     notifications: string;

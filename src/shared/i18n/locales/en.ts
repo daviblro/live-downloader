@@ -170,6 +170,16 @@ export const english: Translation = {
     description: "Download the latest installer from GitHub Releases when you are ready.",
     viewRelease: "View release",
     dismiss: "Dismiss update notice",
+    installableDescription:
+      "Update now to download and install it. Live Downloader restarts when the update finishes.",
+    updateNow: "Update now",
+    updating: "Updating…",
+    downloading: (percent) =>
+      percent === null ? "Downloading the update…" : `Downloading the update… ${percent}%`,
+    installing: "Installing the update. Live Downloader will restart shortly.",
+    failed: (message) => `The update could not be installed: ${message}`,
+    recordingsActiveConfirmation: (count) =>
+      `${count} recording${count === 1 ? " is" : "s are"} in progress. Updating stops ${count === 1 ? "it" : "them"} and keeps what was recorded so far. Update now?`,
   },
   toast: {
     notifications: "Notifications",

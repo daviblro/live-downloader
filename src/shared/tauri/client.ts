@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
   isPermissionGranted,
@@ -15,6 +15,8 @@ import type {
   TwitchConnectResult,
   TwitchDeviceAuthorization,
   TwitchStatus,
+  UpdateCheck,
+  UpdateProgress,
   UpdateTargetInput,
   WatchTarget,
 } from "../contracts";
@@ -43,6 +45,12 @@ export const api = {
   openDownloads: () => invoke<void>("open_download_directory"),
   openUrl: (url: string) => openUrl(url),
   revealRecording: (jobId: string) => invoke<void>("reveal_recording", { jobId }),
+  checkForUpdate: () => invoke<UpdateCheck>("check_for_update"),
+  installUpdate: (onProgress: (progress: UpdateProgress) => void) => {
+    const onEvent = new Channel<UpdateProgress>();
+    onEvent.onmessage = onProgress;
+    return invoke<void>("install_update", { onEvent });
+  },
   listenEngine: (handler: (summary: EngineSummary) => void) =>
     listen<EngineSummary>(ENGINE_CHANGED_EVENT, (event) => handler(event.payload)),
   notify: async (title: string, body: string) => {

@@ -171,6 +171,18 @@ export const portugueseBrazil: Translation = {
     description: "Baixe o instalador mais recente no GitHub Releases quando estiver pronto.",
     viewRelease: "Ver lançamento",
     dismiss: "Fechar aviso de atualização",
+    installableDescription:
+      "Atualize agora para baixar e instalar. O Live Downloader reinicia quando a atualização terminar.",
+    updateNow: "Atualizar agora",
+    updating: "Atualizando…",
+    downloading: (percent) =>
+      percent === null ? "Baixando a atualização…" : `Baixando a atualização… ${percent}%`,
+    installing: "Instalando a atualização. O Live Downloader será reiniciado em instantes.",
+    failed: (message) => `Não foi possível instalar a atualização: ${message}`,
+    recordingsActiveConfirmation: (count) =>
+      count === 1
+        ? "1 gravação está em andamento. A atualização vai interrompê-la e manter o que já foi gravado. Atualizar agora?"
+        : `${count} gravações estão em andamento. A atualização vai interrompê-las e manter o que já foi gravado. Atualizar agora?`,
   },
   toast: {
     notifications: "Notificações",

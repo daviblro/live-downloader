@@ -40,11 +40,45 @@ Microsoft WebView2 is not already installed, Windows downloads it during setup.
 - Closing the window keeps the recorder available in the system tray; choose
   **Exit Live Downloader** from the tray menu to stop it completely.
 - The app checks GitHub Releases at launch and shows a non-intrusive notice when
-  a newer installer is available. Updates are installed by downloading the new
-  installer from GitHub Releases.
+  a newer version is available. Select **Update now** to download, verify, and
+  install it in place; Live Downloader restarts afterwards. Active recordings are
+  stopped first and the footage recorded so far is kept. Releases published
+  without updater signatures fall back to a link to the installer on GitHub
+  Releases.
 
 Only record streams you are authorised to capture. See
 [third-party notices](THIRD_PARTY_NOTICES.md) for bundled-component licensing.
+
+## In-app updates for releases
+
+The in-app updater uses only GitHub Releases. Each signed release publishes the
+installer, its `.sig` signature, and a `latest.json` manifest; the app reads
+`releases/latest/download/latest.json`, verifies the installer signature with a
+public key compiled into the app, and refuses an installer signed for a
+different version.
+
+To enable it, generate an updater key pair once (keep the private key and its
+password backed up: without them, existing installs can no longer update):
+
+```powershell
+pnpm tauri signer generate -w "$HOME\.tauri\live-downloader.key"
+```
+
+Then add these to the repository under **Settings → Secrets and variables →
+Actions**:
+
+| Name                                 | Kind     | Value                                 |
+| ------------------------------------ | -------- | ------------------------------------- |
+| `TAURI_SIGNING_PRIVATE_KEY`          | Secret   | Contents of `live-downloader.key`     |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Secret   | The password chosen during generation |
+| `LIVE_DOWNLOADER_UPDATER_PUBKEY`     | Variable | Contents of `live-downloader.key.pub` |
+
+The release workflow signs the installer and publishes the manifest when these
+are configured, and fails if only one of the key halves is present. Without
+them, releases are published as before and the app shows the manual update
+notice. To build a signed installer locally, set the same three environment
+variables, run `node scripts/write-updater-config.mjs src-tauri/target/updater.conf.json`,
+then `pnpm exec tauri build --bundles nsis --config src-tauri/target/updater.conf.json`.
 
 ## Twitch integration for builds
 
