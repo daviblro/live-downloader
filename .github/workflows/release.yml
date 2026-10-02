@@ -12,6 +12,8 @@ jobs:
     name: Build and publish NSIS installer
     runs-on: windows-latest
     timeout-minutes: 30
+    env:
+      TWITCH_CLIENT_ID: ${{ vars.TWITCH_CLIENT_ID || secrets.TWITCH_CLIENT_ID }}
     steps:
       - uses: actions/checkout@v7
 
@@ -48,6 +50,9 @@ jobs:
       - name: Validate project versions
         run: pnpm version:check
 
+      - name: Fetch verified sidecars
+        run: pnpm sidecars:fetch
+
       - name: Validate frontend
         run: pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
@@ -58,9 +63,6 @@ jobs:
           cargo test --manifest-path src-tauri/Cargo.toml
           cargo install cargo-audit --locked
           cargo audit --file src-tauri/Cargo.lock
-
-      - name: Fetch verified sidecars
-        run: pnpm sidecars:fetch
 
       - name: Build frontend and NSIS installer
         run: pnpm exec tauri build --bundles nsis

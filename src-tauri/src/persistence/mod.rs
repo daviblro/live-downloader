@@ -3,7 +3,7 @@ use std::{path::Path, sync::Mutex};
 use rusqlite::{params, Connection, OptionalExtension};
 use uuid::Uuid;
 
-use crate::domain::{format_time, now, AppSettings, RecordingJob, WatchTarget};
+use crate::domain::{format_time, now, AppSettings, RecordingJob, TargetMetadata, WatchTarget};
 
 mod migrations;
 
@@ -24,6 +24,8 @@ fn map_target(row: &rusqlite::Row<'_>) -> rusqlite::Result<WatchTarget> {
         last_recording_at: row.get(8)?,
         active_job_id: row.get(9)?,
         created_at: row.get(10)?,
+        provider_user_id: row.get(11)?,
+        avatar_url: row.get(12)?,
     })
 }
 
@@ -90,7 +92,8 @@ impl Database {
         let mut statement = connection
             .prepare(
                 "SELECT id, name, url, enabled, state, status_detail, next_check_at,
-                        last_checked_at, last_recording_at, active_job_id, created_at
+                        last_checked_at, last_recording_at, active_job_id, created_at,
+                        provider_user_id, avatar_url
                  FROM watch_targets
                  WHERE deleted_at IS NULL
                  ORDER BY enabled DESC, name COLLATE NOCASE",
@@ -112,7 +115,8 @@ impl Database {
         let mut statement = connection
             .prepare(
                 "SELECT id, name, url, enabled, state, status_detail, next_check_at,
-                    last_checked_at, last_recording_at, active_job_id, created_at
+                    last_checked_at, last_recording_at, active_job_id, created_at,
+                    provider_user_id, avatar_url
              FROM watch_targets
              WHERE enabled = 1 AND deleted_at IS NULL
              ORDER BY name COLLATE NOCASE",
@@ -133,7 +137,8 @@ impl Database {
         connection
             .query_row(
                 "SELECT id, name, url, enabled, state, status_detail, next_check_at,
-                    last_checked_at, last_recording_at, active_job_id, created_at
+                    last_checked_at, last_recording_at, active_job_id, created_at,
+                    provider_user_id, avatar_url
              FROM watch_targets WHERE id = ?1 AND deleted_at IS NULL",
                 params![id],
                 map_target,
@@ -143,8 +148,19 @@ impl Database {
     }
 
     pub fn insert_target(&self, name: &str, url: &str) -> Result<WatchTarget, String> {
+        self.insert_target_with_metadata(name, url, None)
+    }
+
+    pub fn insert_target_with_metadata(
+        &self,
+        name: &str,
+        url: &str,
+        metadata: Option<&TargetMetadata>,
+    ) -> Result<WatchTarget, String> {
         let id = Uuid::new_v4().to_string();
         let timestamp = format_time(now());
+        let provider_user_id = metadata.map(|value| value.provider_user_id.as_str());
+        let avatar_url = metadata.map(|value| value.avatar_url.as_str());
         let connection = self
             .connection
             .lock()
@@ -166,9 +182,11 @@ impl Database {
                     "UPDATE watch_targets
                  SET name = ?2, enabled = 1, state = 'Watching',
                      status_detail = 'Waiting for live stream', next_check_at = ?3,
-                     active_job_id = NULL, deleted_at = NULL, updated_at = ?3
+                     active_job_id = NULL, deleted_at = NULL, updated_at = ?3,
+                     provider_user_id = COALESCE(?4, provider_user_id),
+                     avatar_url = COALESCE(?5, avatar_url)
                  WHERE id = ?1",
-                    params![existing_id, name, timestamp],
+                    params![existing_id, name, timestamp, provider_user_id, avatar_url],
                 )
                 .map_err(|error| error.to_string())?;
             drop(connection);
@@ -178,9 +196,10 @@ impl Database {
         }
         connection
             .execute(
-                "INSERT INTO watch_targets (id, name, url, enabled, state, status_detail, next_check_at, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, 1, 'Watching', 'Waiting for live stream', ?4, ?5, ?5)",
-                params![id, name, url, timestamp, timestamp],
+                "INSERT INTO watch_targets (id, name, url, enabled, state, status_detail, next_check_at,
+                                            created_at, updated_at, provider_user_id, avatar_url)
+                 VALUES (?1, ?2, ?3, 1, 'Watching', 'Waiting for live stream', ?4, ?5, ?5, ?6, ?7)",
+                params![id, name, url, timestamp, timestamp, provider_user_id, avatar_url],
             )
             .map_err(|error| {
                 if error.to_string().contains("UNIQUE") {
@@ -201,14 +220,18 @@ impl Database {
             .map_err(|_| "Database lock poisoned".to_owned())?;
         connection
             .execute(
-                "UPDATE watch_targets SET name = ?2, url = ?3, enabled = ?4, updated_at = ?5
+                "UPDATE watch_targets
+                 SET name = ?2, url = ?3, enabled = ?4, updated_at = ?5,
+                     provider_user_id = ?6, avatar_url = ?7
                  WHERE id = ?1 AND deleted_at IS NULL",
                 params![
                     target.id,
                     target.name,
                     target.url,
                     i64::from(target.enabled),
-                    format_time(now())
+                    format_time(now()),
+                    target.provider_user_id,
+                    target.avatar_url
                 ],
             )
             .map_err(|error| error.to_string())?;
@@ -293,26 +316,27 @@ impl Database {
             .map_err(|_| "Database lock poisoned".to_owned())?;
         connection
             .query_row(
-                "SELECT jobs.id, jobs.target_id, targets.name, jobs.state, jobs.started_at,
+                "SELECT jobs.id, jobs.target_id, targets.name, targets.avatar_url, jobs.state, jobs.started_at,
                         jobs.finished_at, jobs.output_path, jobs.message, jobs.process_id
                  FROM recording_jobs jobs JOIN watch_targets targets ON targets.id = jobs.target_id
                  WHERE jobs.id = ?1",
                 params![id],
                 |row| {
-                    let output_path: Option<String> = row.get(6)?;
+                    let output_path: Option<String> = row.get(7)?;
                     Ok(RecordingJob {
                         id: row.get(0)?,
                         target_id: row.get(1)?,
                         target_name: row.get(2)?,
-                        state: row.get(3)?,
-                        started_at: row.get(4)?,
-                        finished_at: row.get(5)?,
+                        target_avatar_url: row.get(3)?,
+                        state: row.get(4)?,
+                        started_at: row.get(5)?,
+                        finished_at: row.get(6)?,
                         file_exists: output_path
                             .as_deref()
                             .is_some_and(|path| Path::new(path).is_file()),
                         output_path,
-                        message: row.get(7)?,
-                        process_id: row.get::<_, Option<i64>>(8)?.map(|value| value as u32),
+                        message: row.get(8)?,
+                        process_id: row.get::<_, Option<i64>>(9)?.map(|value| value as u32),
                     })
                 },
             )
@@ -331,7 +355,7 @@ impl Database {
             .map_err(|_| "Database lock poisoned".to_owned())?;
         let mut statement = connection
             .prepare(
-                "SELECT jobs.id, jobs.target_id, targets.name, jobs.state, jobs.started_at,
+                "SELECT jobs.id, jobs.target_id, targets.name, targets.avatar_url, jobs.state, jobs.started_at,
                         jobs.finished_at, jobs.output_path, jobs.message, jobs.process_id
                  FROM recording_jobs jobs JOIN watch_targets targets ON targets.id = jobs.target_id
                  ORDER BY jobs.started_at DESC LIMIT ?1 OFFSET ?2",
@@ -339,20 +363,21 @@ impl Database {
             .map_err(|error| error.to_string())?;
         let rows = statement
             .query_map(params![limit as i64, offset as i64], |row| {
-                let output_path: Option<String> = row.get(6)?;
+                let output_path: Option<String> = row.get(7)?;
                 Ok(RecordingJob {
                     id: row.get(0)?,
                     target_id: row.get(1)?,
                     target_name: row.get(2)?,
-                    state: row.get(3)?,
-                    started_at: row.get(4)?,
-                    finished_at: row.get(5)?,
+                    target_avatar_url: row.get(3)?,
+                    state: row.get(4)?,
+                    started_at: row.get(5)?,
+                    finished_at: row.get(6)?,
                     file_exists: output_path
                         .as_deref()
                         .is_some_and(|path| Path::new(path).is_file()),
                     output_path,
-                    message: row.get(7)?,
-                    process_id: row.get::<_, Option<i64>>(8)?.map(|value| value as u32),
+                    message: row.get(8)?,
+                    process_id: row.get::<_, Option<i64>>(9)?.map(|value| value as u32),
                 })
             })
             .map_err(|error| error.to_string())?;
@@ -610,6 +635,36 @@ mod tests {
             job.id
         );
 
+        drop(database);
+        cleanup_database(&path);
+    }
+
+    #[test]
+    fn update_target_persists_provider_metadata() {
+        let path = std::env::temp_dir().join(format!(
+            "live-downloader-target-metadata-{}.db",
+            uuid::Uuid::new_v4()
+        ));
+        let database = Database::open(&path).expect("database should open");
+        let mut target = database
+            .insert_target("Example", "https://www.twitch.tv/example")
+            .expect("target should be inserted");
+        target.provider_user_id = Some("provider-1".to_owned());
+        target.avatar_url = Some("https://static-cdn.jtvnw.net/avatar.png".to_owned());
+
+        database
+            .update_target(&target)
+            .expect("target metadata should update");
+        let updated = database
+            .target(&target.id)
+            .expect("target lookup should work")
+            .expect("target should exist");
+
+        assert_eq!(updated.provider_user_id.as_deref(), Some("provider-1"));
+        assert_eq!(
+            updated.avatar_url.as_deref(),
+            Some("https://static-cdn.jtvnw.net/avatar.png")
+        );
         drop(database);
         cleanup_database(&path);
     }

@@ -45,6 +45,7 @@ export interface Translation {
     remove: string;
     switchView: string;
     checkNow: (name: string) => string;
+    editSource: (name: string) => string;
     pauseSource: (name: string) => string;
     resumeSource: (name: string) => string;
     removeSource: (name: string) => string;
@@ -108,10 +109,22 @@ export interface Translation {
     startWithWindows: string;
     startWithWindowsDescription: string;
     savedLocally: string;
+    twitch: string;
+    twitchDescription: string;
+    twitchConnectedAs: (login: string) => string;
+    twitchDisconnected: string;
+    twitchUnavailable: string;
+    connectTwitch: string;
+    disconnectTwitch: string;
+    waitingForTwitch: string;
+    activationCode: string;
+    twitchExpired: string;
   };
   dialog: {
     title: string;
     description: string;
+    editTitle: string;
+    editDescription: string;
     close: string;
     sourceName: string;
     sourceNamePlaceholder: string;
@@ -160,6 +173,7 @@ export interface Translation {
     recordingStartedBackground: string;
     historyCleared: string;
     removed: (name: string) => string;
+    updated: (name: string) => string;
   };
   states: Record<string, string>;
   runtime: Record<string, string>;

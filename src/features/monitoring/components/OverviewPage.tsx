@@ -13,6 +13,7 @@ interface OverviewPageProps {
   jobs: RecordingJob[];
   onAdd: () => void;
   onCheck: (target: WatchTarget) => void;
+  onEdit: (target: WatchTarget) => void;
   onImportLegacy: () => void;
   onOpenDownloads: () => void;
   onPauseAll: () => void;
@@ -29,6 +30,7 @@ export function OverviewPage({
   jobs,
   onAdd,
   onCheck,
+  onEdit,
   onImportLegacy,
   onOpenDownloads,
   onPauseAll,
@@ -86,14 +88,14 @@ export function OverviewPage({
       </div>
       <div className="active-rail">
         {recordings.length ? (
-          recordings.map((target, index) => (
+          recordings.map((target) => (
             <button
               type="button"
               className={`recording-card ${selected?.id === target.id ? "active" : ""}`}
               onClick={() => onSelect(target)}
               key={target.id}
             >
-              <Avatar label={target.name} index={index} />
+              <Avatar label={target.name} colorKey={target.id} imageUrl={target.avatarUrl} />
               <span>
                 <strong>{target.name}</strong>
                 <small>{new URL(target.url).hostname.replace("www.", "")}</small>
@@ -140,6 +142,7 @@ export function OverviewPage({
             selectedId={selected?.id ?? null}
             onSelect={onSelect}
             onCheck={onCheck}
+            onEdit={onEdit}
             onToggle={onToggle}
             onRemove={onRemove}
           />

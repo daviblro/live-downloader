@@ -1,7 +1,13 @@
-import { Check, FolderCog, Save } from "lucide-react";
-import { useEffect, useState } from "react";
-import type { AppSettings, Locale } from "../../../shared/contracts";
+import { Check, FolderCog, Link2, Save, Unplug } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type {
+  AppSettings,
+  Locale,
+  TwitchDeviceAuthorization,
+  TwitchStatus,
+} from "../../../shared/contracts";
 import { localeOptions, useI18n } from "../../../shared/i18n";
+import { api, isDesktop } from "../../../shared/tauri/client";
 
 interface SettingsPageProps {
   settings: AppSettings;
@@ -14,8 +20,28 @@ export function SettingsPage({ settings, onSave, onLocalePreview }: SettingsPage
   const [draft, setDraft] = useState(settings);
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [twitch, setTwitch] = useState<TwitchStatus | null>(null);
+  const [twitchAuthorization, setTwitchAuthorization] = useState<TwitchDeviceAuthorization | null>(
+    null,
+  );
+  const [twitchConnecting, setTwitchConnecting] = useState(false);
+  const [twitchError, setTwitchError] = useState<string | null>(null);
+  const twitchAttempt = useRef(0);
 
   useEffect(() => setDraft(settings), [settings]);
+  useEffect(() => {
+    if (!isDesktop) {
+      setTwitch({ available: false, connected: false, login: null });
+      return;
+    }
+    void api
+      .twitchStatus()
+      .then(setTwitch)
+      .catch((reason) => setTwitchError(String(reason)));
+    return () => {
+      twitchAttempt.current += 1;
+    };
+  }, []);
   const update = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
 
@@ -29,6 +55,55 @@ export function SettingsPage({ settings, onSave, onLocalePreview }: SettingsPage
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
       setState("error");
+    }
+  }
+
+  async function connectTwitch() {
+    const attempt = ++twitchAttempt.current;
+    setTwitchConnecting(true);
+    setTwitchError(null);
+    try {
+      const authorization = await api.startTwitchConnect();
+      if (attempt !== twitchAttempt.current) return;
+      setTwitchAuthorization(authorization);
+      try {
+        await api.openUrl(authorization.verificationUri);
+      } catch (reason) {
+        if (attempt === twitchAttempt.current)
+          setTwitchError(reason instanceof Error ? reason.message : String(reason));
+      }
+      const deadline = Date.now() + authorization.expiresIn * 1000;
+      while (Date.now() < deadline && attempt === twitchAttempt.current) {
+        await new Promise((resolve) =>
+          window.setTimeout(resolve, Math.max(authorization.interval, 1) * 1000),
+        );
+        const result = await api.pollTwitchConnect(authorization.deviceCode);
+        if (result.connected) {
+          setTwitch({ available: true, connected: true, login: result.login });
+          setTwitchAuthorization(null);
+          setTwitchError(null);
+          return;
+        }
+      }
+      if (attempt === twitchAttempt.current) setTwitchError(t.settings.twitchExpired);
+    } catch (reason) {
+      if (attempt === twitchAttempt.current)
+        setTwitchError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      if (attempt === twitchAttempt.current) setTwitchConnecting(false);
+    }
+  }
+
+  async function disconnectTwitch() {
+    twitchAttempt.current += 1;
+    setTwitchConnecting(false);
+    setTwitchAuthorization(null);
+    setTwitchError(null);
+    try {
+      await api.disconnectTwitch();
+      setTwitch({ available: true, connected: false, login: null });
+    } catch (reason) {
+      setTwitchError(reason instanceof Error ? reason.message : String(reason));
     }
   }
 
@@ -95,6 +170,48 @@ export function SettingsPage({ settings, onSave, onLocalePreview }: SettingsPage
               onChange={(event) => update("notificationsEnabled", event.target.checked)}
             />
           </label>
+        </section>
+        <section className="settings-group twitch-settings">
+          <h2>{t.settings.twitch}</h2>
+          <p>{t.settings.twitchDescription}</p>
+          <div className="twitch-connection-state">
+            <span className={twitch?.connected ? "connected" : ""} aria-hidden="true" />
+            <strong>
+              {twitch?.connected
+                ? t.settings.twitchConnectedAs(twitch.login ?? "Twitch")
+                : twitch?.available === false
+                  ? t.settings.twitchUnavailable
+                  : t.settings.twitchDisconnected}
+            </strong>
+          </div>
+          {twitchAuthorization && (
+            <div className="twitch-activation" role="status">
+              <span>{t.settings.activationCode}</span>
+              <strong>{twitchAuthorization.userCode}</strong>
+              <small>{t.settings.waitingForTwitch}</small>
+            </div>
+          )}
+          {twitch?.connected ? (
+            <button type="button" className="secondary-action" onClick={disconnectTwitch}>
+              <Unplug size={16} />
+              {t.settings.disconnectTwitch}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="secondary-action"
+              onClick={connectTwitch}
+              disabled={!twitch?.available || twitchConnecting}
+            >
+              <Link2 size={16} />
+              {twitchConnecting ? t.settings.waitingForTwitch : t.settings.connectTwitch}
+            </button>
+          )}
+          {twitchError && (
+            <p className="form-error" role="alert">
+              {twitchError}
+            </p>
+          )}
         </section>
         <section className="settings-group">
           <h2>{t.settings.recordingLibrary}</h2>

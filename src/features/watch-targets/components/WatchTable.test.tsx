@@ -17,12 +17,15 @@ const target: WatchTarget = {
   lastRecordingAt: null,
   activeJobId: null,
   createdAt: "2024-01-01T00:00:00Z",
+  providerUserId: null,
+  avatarUrl: null,
 };
 
 describe("WatchTable", () => {
   it("invokes row actions", async () => {
     const user = userEvent.setup();
     const onCheck = vi.fn();
+    const onEdit = vi.fn();
     const onToggle = vi.fn();
     const onRemove = vi.fn();
     render(
@@ -32,6 +35,7 @@ describe("WatchTable", () => {
           selectedId={null}
           onSelect={vi.fn()}
           onCheck={onCheck}
+          onEdit={onEdit}
           onToggle={onToggle}
           onRemove={onRemove}
         />
@@ -39,10 +43,12 @@ describe("WatchTable", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Check Example now" }));
+    await user.click(screen.getByRole("button", { name: "Edit Example" }));
     await user.click(screen.getByRole("button", { name: "Pause Example" }));
     await user.click(screen.getByRole("button", { name: "Remove Example" }));
 
     expect(onCheck).toHaveBeenCalledWith(target);
+    expect(onEdit).toHaveBeenCalledWith(target);
     expect(onToggle).toHaveBeenCalledWith(target);
     expect(onRemove).toHaveBeenCalledWith(target);
   });

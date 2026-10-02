@@ -5,6 +5,7 @@ mod legacy;
 mod monitoring;
 mod persistence;
 mod platform;
+mod twitch;
 
 use std::{
     path::PathBuf,
@@ -18,6 +19,7 @@ use app::{build_tray, show_main_window, AppState};
 use monitoring::RecordingEngine;
 use persistence::Database;
 use tauri::{Manager, WindowEvent};
+use twitch::TwitchService;
 
 fn application_data_directory() -> Result<PathBuf, String> {
     directories::ProjectDirs::from("app", "Live Downloader", "Live Downloader")
@@ -46,6 +48,8 @@ pub fn run() {
                     .map_err(std::io::Error::other)?,
             );
             let engine = RecordingEngine::new(app.handle().clone(), database.clone());
+            let twitch = Arc::new(TwitchService::new(option_env!("TWITCH_CLIENT_ID")));
+            let twitch_validation = twitch.clone();
             database
                 .recover_interrupted_jobs()
                 .map_err(std::io::Error::other)?;
@@ -53,7 +57,14 @@ pub fn run() {
             app.manage(AppState {
                 database,
                 engine,
+                twitch,
                 is_quitting: AtomicBool::new(false),
+            });
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    let _ = twitch_validation.status().await;
+                    tokio::time::sleep(std::time::Duration::from_secs(60 * 60)).await;
+                }
             });
             build_tray(app)?;
             if !start_in_background {
@@ -71,6 +82,10 @@ pub fn run() {
             commands::monitoring::check_target_now,
             commands::monitoring::stop_recording,
             commands::settings::update_settings,
+            commands::twitch::twitch_status,
+            commands::twitch::start_twitch_connect,
+            commands::twitch::poll_twitch_connect,
+            commands::twitch::disconnect_twitch,
             commands::recordings::list_history,
             commands::recordings::clear_history,
             commands::legacy::import_legacy,

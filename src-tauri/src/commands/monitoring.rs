@@ -14,6 +14,15 @@ pub async fn pause_all(state: State<'_, AppState>) -> Result<EngineSummary, Stri
 
 #[tauri::command]
 pub async fn check_target_now(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let mut target = state
+        .database
+        .target(&id)?
+        .ok_or_else(|| "That stream no longer exists.".to_owned())?;
+    if let Ok(Some(metadata)) = state.twitch.metadata_for_url(&target.url).await {
+        target.provider_user_id = Some(metadata.provider_user_id);
+        target.avatar_url = Some(metadata.avatar_url);
+        state.database.update_target(&target)?;
+    }
     state.engine.check_now(id).await
 }
 

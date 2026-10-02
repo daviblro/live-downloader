@@ -12,6 +12,9 @@ import type {
   CreateTargetInput,
   EngineSummary,
   RecordingJob,
+  TwitchConnectResult,
+  TwitchDeviceAuthorization,
+  TwitchStatus,
   UpdateTargetInput,
   WatchTarget,
 } from "../contracts";
@@ -29,6 +32,11 @@ export const api = {
   checkNow: (id: string) => invoke<void>("check_target_now", { id }),
   stopRecording: (jobId: string) => invoke<void>("stop_recording", { jobId }),
   updateSettings: (settings: AppSettings) => invoke<AppSettings>("update_settings", { settings }),
+  twitchStatus: () => invoke<TwitchStatus>("twitch_status"),
+  startTwitchConnect: () => invoke<TwitchDeviceAuthorization>("start_twitch_connect"),
+  pollTwitchConnect: (deviceCode: string) =>
+    invoke<TwitchConnectResult>("poll_twitch_connect", { deviceCode }),
+  disconnectTwitch: () => invoke<void>("disconnect_twitch"),
   history: (limit = 50, offset = 0) => invoke<RecordingJob[]>("list_history", { limit, offset }),
   clearHistory: () => invoke<number>("clear_history"),
   importLegacy: () => invoke("import_legacy"),

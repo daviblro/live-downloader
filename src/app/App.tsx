@@ -39,6 +39,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [showAdd, setShowAdd] = useState(false);
+  const [editingTarget, setEditingTarget] = useState<WatchTarget | null>(null);
   const [availableRelease, setAvailableRelease] = useState<AvailableRelease | null>(null);
   const [localePreview, setLocalePreview] = useState<Locale | null>(null);
   const [historyJobs, setHistoryJobs] = useState<RecordingJob[]>([]);
@@ -146,6 +147,8 @@ export default function App() {
       lastRecordingAt: null,
       activeJobId: null,
       createdAt: new Date().toISOString(),
+      providerUserId: null,
+      avatarUrl: null,
     };
     setPayload((current) => ({
       ...current,
@@ -153,6 +156,21 @@ export default function App() {
       engine: { ...current.engine, enabledTargets: current.engine.enabledTargets + 1 },
     }));
     setSelectedId(target.id);
+  };
+
+  const editStream = async (target: WatchTarget, input: { name: string; url: string }) => {
+    if (isDesktop) {
+      await api.updateTarget({ id: target.id, enabled: target.enabled, ...input });
+      await refresh();
+    } else {
+      setPayload((current) => ({
+        ...current,
+        targets: current.targets.map((item) =>
+          item.id === target.id ? { ...item, ...input } : item,
+        ),
+      }));
+    }
+    toast.success(t.toast.updated(input.name));
   };
 
   const openDownloads = () =>
@@ -274,6 +292,7 @@ export default function App() {
                 jobs={payload.jobs}
                 onAdd={() => setShowAdd(true)}
                 onCheck={checkNow}
+                onEdit={setEditingTarget}
                 onImportLegacy={importLegacy}
                 onOpenDownloads={openDownloads}
                 onPauseAll={pauseAll}
@@ -294,6 +313,7 @@ export default function App() {
               onAdd={() => setShowAdd(true)}
               onSelect={(target) => setSelectedId(target.id)}
               onCheck={checkNow}
+              onEdit={setEditingTarget}
               onToggle={toggleTarget}
               onRemove={removeTarget}
             />
@@ -354,6 +374,13 @@ export default function App() {
           theme={toastTheme}
         />
         {showAdd && <AddStreamDialog onClose={() => setShowAdd(false)} onSubmit={addStream} />}
+        {editingTarget && (
+          <AddStreamDialog
+            target={editingTarget}
+            onClose={() => setEditingTarget(null)}
+            onSubmit={(input) => editStream(editingTarget, input)}
+          />
+        )}
       </div>
     </I18nProvider>
   );

@@ -487,6 +487,12 @@ tbody tr.selected {
   border-radius: 50%;
   font-size: 12px;
   font-weight: 800;
+  overflow: hidden;
+}
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .status {
   display: inline-flex;
@@ -904,6 +910,50 @@ tbody tr.selected {
   padding: 0 0 11px;
   color: var(--muted);
   font-size: 12px;
+}
+.twitch-settings > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.twitch-connection-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-strong);
+  font-size: 12px;
+}
+.twitch-connection-state > span {
+  width: 8px;
+  height: 8px;
+  background: var(--muted);
+  border-radius: 50%;
+}
+.twitch-connection-state > span.connected {
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgb(53 181 124 / 10%);
+}
+.twitch-activation {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.twitch-activation span,
+.twitch-activation small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.twitch-activation strong {
+  color: var(--text);
+  font-size: 18px;
+  letter-spacing: 0.12em;
+}
+.twitch-settings .secondary-action {
+  justify-self: start;
 }
 .save-feedback {
   display: inline-flex;
