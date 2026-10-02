@@ -30,6 +30,13 @@ Microsoft WebView2 is not already installed, Windows downloads it during setup.
   connection.
 - Recordings use `channel - mm-dd-yyyy hh-mm-ss.ext` in English and
   `channel - dd-mm-yyyy hh-mm-ss.ext` in Portuguese, with Windows-safe separators.
+- **Stop recording** ends the current broadcast's recording; the source is not
+  recorded again until it goes offline or you select **Check now**. If a
+  recording drops unexpectedly, the source is re-checked within seconds so the
+  recording resumes in a new file.
+- A stopped or interrupted recording is kept as a playable `.ts` file instead of
+  an unfinished `.part` file. Recording does not start when less than 1 GB is
+  free on the recording drive.
 - Closing the window keeps the recorder available in the system tray; choose
   **Exit Live Downloader** from the tray menu to stop it completely.
 - The app checks GitHub Releases at launch and shows a non-intrusive notice when

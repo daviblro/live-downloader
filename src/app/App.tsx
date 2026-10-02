@@ -229,7 +229,12 @@ export default function App() {
     void action(async () => {
       if (isDesktop) await api.revealRecording(jobId);
     });
-  const removeTarget = (target: WatchTarget) =>
+  const removeTarget = (target: WatchTarget) => {
+    const confirmation =
+      target.state === "Recording"
+        ? t.toast.removeRecordingConfirmation(target.name)
+        : t.toast.removeConfirmation(target.name);
+    if (!window.confirm(confirmation)) return;
     void action(async () => {
       if (isDesktop) {
         await api.removeTarget(target.id);
@@ -240,6 +245,7 @@ export default function App() {
           targets: current.targets.filter((item) => item.id !== target.id),
         }));
     }, t.toast.removed(target.name));
+  };
   const toggleTarget = (target: WatchTarget) =>
     void action(async () => {
       if (isDesktop) {

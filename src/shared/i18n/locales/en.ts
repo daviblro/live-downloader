@@ -182,9 +182,16 @@ export const english: Translation = {
     checking: (name) => `Checking ${name} now.`,
     recordingStopping: "Recording is stopping.",
     recordingStopped: "Recording stopped in preview.",
-    recordingStartedBackground: "A stream started recording in the background.",
+    recordingStartedFor: (name) => `${name} is live. Recording started.`,
+    recordingFinishedFor: (name) => `${name}: recording finished.`,
+    recordingFailedFor: (name) =>
+      `${name}: recording stopped unexpectedly. It will be checked again.`,
     historyCleared: "Recording history cleared.",
     removed: (name) => `${name} removed.`,
+    removeConfirmation: (name) =>
+      `Remove ${name} from the watch list? Its recording history will be kept.`,
+    removeRecordingConfirmation: (name) =>
+      `${name} is recording right now. Stop the recording and remove it from the watch list?`,
     updated: (name) => `${name} updated.`,
   },
   states: {
@@ -210,5 +217,18 @@ export const english: Translation = {
     "Recording started": "Recording started",
     "Recording completed": "Recording completed",
     "Preparing the recording file": "Preparing the recording file",
+    "Waiting for the stream to go live": "Waiting for the stream to go live",
+    "Checking whether the stream is live": "Checking whether the stream is live",
+    "Waiting for a recording slot": "Waiting for a recording slot",
+    "Live check timed out; the next scheduled check will retry":
+      "Live check timed out; the next scheduled check will retry",
+    "Previous recording was interrupted": "Previous recording was interrupted",
+    "Recording was interrupted when the application stopped":
+      "Recording was interrupted when the application stopped",
+    "Cancelled by the user": "Stopped by the user",
+    "Recording stopped by the user; waiting for the next broadcast":
+      "Recording stopped by the user; waiting for the next broadcast",
+    "Less than 1 GB is free on the recording drive; free up space to resume recording":
+      "Less than 1 GB is free on the recording drive; free up space to resume recording",
   },
 };

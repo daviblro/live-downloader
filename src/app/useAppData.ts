@@ -4,6 +4,7 @@ import { demoPayload } from "../mocks/demoPayload";
 import type { BootstrapPayload } from "../shared/contracts";
 import { translations } from "../shared/i18n";
 import { api, isDesktop } from "../shared/tauri/client";
+import { recordingNotifications } from "./recordingNotifications";
 
 export function useAppData() {
   const [payload, setPayload] = useState<BootstrapPayload>(demoPayload);
@@ -29,14 +30,13 @@ export function useAppData() {
         const previous = payloadRef.current;
         try {
           const next = await refresh();
-          if (
-            previous.settings.notificationsEnabled &&
-            next.engine.activeRecordings > previous.engine.activeRecordings
-          ) {
-            await api.notify(
-              "Live Downloader",
-              translations[next.settings.locale].toast.recordingStartedBackground,
+          if (next.settings.notificationsEnabled) {
+            const messages = recordingNotifications(
+              previous,
+              next,
+              translations[next.settings.locale],
             );
+            for (const message of messages) await api.notify("Live Downloader", message);
           }
         } catch (reason) {
           toast.error(String(reason), { autoClose: false, closeOnClick: false });

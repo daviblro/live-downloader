@@ -170,9 +170,13 @@ export interface Translation {
     checking: (name: string) => string;
     recordingStopping: string;
     recordingStopped: string;
-    recordingStartedBackground: string;
+    recordingStartedFor: (name: string) => string;
+    recordingFinishedFor: (name: string) => string;
+    recordingFailedFor: (name: string) => string;
     historyCleared: string;
     removed: (name: string) => string;
+    removeConfirmation: (name: string) => string;
+    removeRecordingConfirmation: (name: string) => string;
     updated: (name: string) => string;
   };
   states: Record<string, string>;

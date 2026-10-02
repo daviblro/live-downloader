@@ -103,6 +103,15 @@ pub fn run() {
         });
 
     builder
-        .run(tauri::generate_context!())
-        .expect("error while running Live Downloader");
+        .build(tauri::generate_context!())
+        .expect("error while building Live Downloader")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                // Recorder children (yt-dlp and its FFmpeg process) would
+                // otherwise keep running after the application exits.
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.engine.shutdown();
+                }
+            }
+        });
 }

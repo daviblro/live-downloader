@@ -10,12 +10,15 @@ use std::{
 use chrono::{DateTime, Duration as ChronoDuration, Local, Utc};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_shell::{process::CommandEvent, ShellExt};
-use tokio::{process::Command, sync::Semaphore};
+use tokio::{
+    process::Command,
+    sync::{Notify, Semaphore},
+};
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    probe::{classify_probe_output, ProbeOutcome, MAX_CONCURRENT_PROBES},
-    recorder::ActiveJob,
+    probe::{classify_probe_output, ProbeOutcome, LIVE_STATUS_TEMPLATE, MAX_CONCURRENT_PROBES},
+    recorder::{ActiveJob, PartialOutput},
     scheduler::EngineRuntime,
 };
 use crate::{
@@ -24,7 +27,28 @@ use crate::{
     },
     legacy::is_http_url,
     persistence::Database,
+    platform::{
+        disk::disk_usage_for,
+        process::{hide_console_window, kill_process_tree},
+    },
 };
+
+const PROBE_TIMEOUT: Duration = Duration::from_secs(45);
+const PROCESS_EXIT_TIMEOUT: Duration = Duration::from_secs(10);
+/// A recording that ran at least this long is followed by a quick re-check, so
+/// a dropped connection or a briefly interrupted broadcast resumes promptly
+/// instead of waiting for the next scheduled check.
+const RESUME_MIN_RECORDING: ChronoDuration = ChronoDuration::seconds(60);
+const RESUME_CHECK_DELAY: Duration = Duration::from_secs(15);
+const MIN_FREE_DISK_BYTES: u64 = 1024 * 1024 * 1024;
+const USER_STOPPED_DETAIL: &str = "Recording stopped by the user; waiting for the next broadcast";
+const NOT_LIVE_DETAIL: &str = "Waiting for the stream to go live";
+
+struct ProbeProcessOutput {
+    success: bool,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+}
 
 #[derive(Debug)]
 struct OutputCandidate {
@@ -39,6 +63,7 @@ pub struct RecordingEngine {
     database: Arc<Database>,
     runtime: Arc<Mutex<EngineRuntime>>,
     probe_limiter: Arc<Semaphore>,
+    wake: Arc<Notify>,
 }
 
 impl RecordingEngine {
@@ -48,10 +73,14 @@ impl RecordingEngine {
             database,
             runtime: Arc::new(Mutex::new(EngineRuntime::default())),
             probe_limiter: Arc::new(Semaphore::new(MAX_CONCURRENT_PROBES)),
+            wake: Arc::new(Notify::new()),
         }
     }
 
-    pub fn settings_changed(&self) {
+    pub fn settings_changed(&self, schedule_changed: bool) {
+        if schedule_changed {
+            self.wake.notify_one();
+        }
         self.emit_change();
     }
 
@@ -66,13 +95,11 @@ impl RecordingEngine {
             running: runtime.running,
             active_recordings: runtime.active_jobs.len(),
             enabled_targets: targets.len(),
-            next_global_check_at: if runtime.running {
-                Some(format_time(
-                    now() + ChronoDuration::seconds(settings.probe_interval_seconds as i64),
-                ))
-            } else {
-                None
-            },
+            next_global_check_at: runtime
+                .running
+                .then_some(runtime.next_tick_at)
+                .flatten()
+                .map(format_time),
             sidecar_status: self.sidecar_status(&settings),
         })
     }
@@ -118,17 +145,24 @@ impl RecordingEngine {
     }
 
     pub fn start(&self) -> Result<EngineSummary, String> {
-        {
+        let resumed = {
             let mut runtime = self
                 .runtime
                 .lock()
                 .map_err(|_| "Engine lock poisoned".to_owned())?;
+            // The scheduler's first pass runs immediately; only a resume from
+            // pause needs to interrupt its sleep.
+            let resumed = !runtime.running && runtime.scheduler_started;
             runtime.running = true;
             if !runtime.scheduler_started {
                 runtime.scheduler_started = true;
                 let engine = self.clone();
                 tauri::async_runtime::spawn(async move { engine.scheduler_loop().await });
             }
+            resumed
+        };
+        if resumed {
+            self.wake.notify_one();
         }
         self.emit_change();
         self.summary()
@@ -141,6 +175,7 @@ impl RecordingEngine {
                 .lock()
                 .map_err(|_| "Engine lock poisoned".to_owned())?;
             runtime.running = false;
+            runtime.next_tick_at = None;
             runtime.queued_targets.clear();
             runtime
                 .active_jobs
@@ -163,20 +198,48 @@ impl RecordingEngine {
         if !target.enabled {
             return Err("Enable the stream before checking it.".to_owned());
         }
-        let engine = self.clone();
-        tauri::async_runtime::spawn(async move { engine.probe_target(target).await });
+        // A manual check is an explicit request to record again after a stop.
+        if let Ok(mut runtime) = self.runtime.lock() {
+            runtime.suppressed_targets.remove(&target_id);
+        }
+        self.spawn_probe(target);
         Ok(())
     }
 
-    pub async fn stop_job(&self, job_id: String) -> Result<(), String> {
-        let token = self
+    /// Checks a newly added, re-enabled or edited target right away instead of
+    /// waiting for the next scheduled check.
+    pub fn check_soon(&self, target_id: &str) {
+        let running = self
             .runtime
             .lock()
-            .map_err(|_| "Engine lock poisoned".to_owned())?
-            .active_jobs
-            .get(&job_id)
-            .map(|job| job.cancellation.clone())
-            .ok_or_else(|| "That recording is no longer active.".to_owned())?;
+            .map(|runtime| runtime.running)
+            .unwrap_or(false);
+        if !running {
+            return;
+        }
+        if let Ok(Some(target)) = self.database.target(target_id) {
+            if target.enabled {
+                self.spawn_probe(target);
+            }
+        }
+    }
+
+    pub async fn stop_job(&self, job_id: String) -> Result<(), String> {
+        let token = {
+            let mut runtime = self
+                .runtime
+                .lock()
+                .map_err(|_| "Engine lock poisoned".to_owned())?;
+            let (target_id, token) = runtime
+                .active_jobs
+                .get(&job_id)
+                .map(|job| (job.target_id.clone(), job.cancellation.clone()))
+                .ok_or_else(|| "That recording is no longer active.".to_owned())?;
+            // Without this the next scheduled check would immediately start
+            // recording the same broadcast again.
+            runtime.suppressed_targets.insert(target_id);
+            token
+        };
         token.cancel();
         Ok(())
     }
@@ -190,6 +253,7 @@ impl RecordingEngine {
                 runtime.queued_targets.retain(|queued| queued != target_id);
                 runtime.probing_targets.remove(target_id);
                 runtime.starting_targets.remove(target_id);
+                runtime.suppressed_targets.remove(target_id);
                 runtime
                     .active_jobs
                     .values()
@@ -203,6 +267,35 @@ impl RecordingEngine {
         }
     }
 
+    /// Stops every recorder process tree synchronously. Used when the
+    /// application exits, when spawned cleanup tasks will no longer run.
+    pub fn shutdown(&self) {
+        let jobs = self
+            .runtime
+            .lock()
+            .map(|mut runtime| {
+                runtime.running = false;
+                runtime.queued_targets.clear();
+                runtime.active_jobs.drain().collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        for (job_id, job) in jobs {
+            job.cancellation.cancel();
+            kill_process_tree(job.pid);
+            let output_path = recover_partial_output(&job.output.directory, &job.output.timestamp)
+                .map(|path| path.to_string_lossy().into_owned());
+            let _ = self.database.finish_job(
+                &job_id,
+                "Interrupted",
+                "Recording was interrupted when the application stopped",
+                output_path.as_deref(),
+            );
+            let _ = self
+                .database
+                .target_recording_finished(&job.target_id, "Previous recording was interrupted");
+        }
+    }
+
     async fn scheduler_loop(self) {
         loop {
             let running = self
@@ -211,7 +304,10 @@ impl RecordingEngine {
                 .map(|runtime| runtime.running)
                 .unwrap_or(false);
             if !running {
-                tokio::time::sleep(Duration::from_secs(1)).await;
+                tokio::select! {
+                    _ = self.wake.notified() => {}
+                    _ = tokio::time::sleep(Duration::from_secs(1)) => {}
+                }
                 continue;
             }
 
@@ -222,13 +318,20 @@ impl RecordingEngine {
                     continue;
                 }
             };
+            let interval = Duration::from_secs(settings.probe_interval_seconds.max(30));
+            if let Ok(mut runtime) = self.runtime.lock() {
+                runtime.next_tick_at =
+                    Some(now() + ChronoDuration::seconds(interval.as_secs() as i64));
+            }
             let targets = self.database.enabled_targets().unwrap_or_default();
             for target in targets {
-                let engine = self.clone();
-                tauri::async_runtime::spawn(async move { engine.probe_target(target).await });
+                self.spawn_probe(target);
             }
             self.emit_change();
-            tokio::time::sleep(Duration::from_secs(settings.probe_interval_seconds.max(30))).await;
+            tokio::select! {
+                _ = self.wake.notified() => {}
+                _ = tokio::time::sleep(interval) => {}
+            }
         }
     }
 
@@ -270,11 +373,20 @@ impl RecordingEngine {
         );
         self.emit_change();
 
-        let probe_result =
-            tokio::time::timeout(Duration::from_secs(30), self.probe(&settings, &target.url)).await;
+        let probe_result = self.probe(&settings, &target.url).await;
         drop(permit);
         match probe_result {
-            Ok(Ok(ProbeOutcome::Live)) => {
+            Ok(ProbeOutcome::Live) if self.is_suppressed(&target.id) => {
+                let _ = self.database.set_target_status(
+                    &target.id,
+                    "Watching",
+                    USER_STOPPED_DETAIL,
+                    Some(&next_check),
+                    None,
+                );
+                self.emit_change();
+            }
+            Ok(ProbeOutcome::Live) => {
                 let target_id = target.id.clone();
                 if let Err(error) = self.start_recording(target, settings).await {
                     let _ = self.database.set_target_status(
@@ -287,17 +399,20 @@ impl RecordingEngine {
                     self.emit_change();
                 }
             }
-            Ok(Ok(ProbeOutcome::Offline)) => {
+            Ok(ProbeOutcome::Offline) => {
+                if let Ok(mut runtime) = self.runtime.lock() {
+                    runtime.suppressed_targets.remove(&target.id);
+                }
                 let _ = self.database.set_target_status(
                     &target.id,
                     "Watching",
-                    "Waiting for the stream to go live",
+                    NOT_LIVE_DETAIL,
                     Some(&next_check),
                     None,
                 );
                 self.emit_change();
             }
-            Ok(Ok(ProbeOutcome::Failed(error))) | Ok(Err(error)) => {
+            Ok(ProbeOutcome::Failed(error)) => {
                 let _ = self.database.set_target_status(
                     &target.id,
                     "Needs attention",
@@ -307,11 +422,11 @@ impl RecordingEngine {
                 );
                 self.emit_change();
             }
-            Err(_) => {
+            Err(error) => {
                 let _ = self.database.set_target_status(
                     &target.id,
                     "Retrying",
-                    "Live check timed out; the next scheduled check will retry",
+                    &error,
                     Some(&next_check),
                     None,
                 );
@@ -320,48 +435,96 @@ impl RecordingEngine {
         }
     }
 
+    /// Runs the live check. `Err` means the check itself could not complete
+    /// (timeout or the tool could not start) and will be retried.
     async fn probe(&self, settings: &AppSettings, url: &str) -> Result<ProbeOutcome, String> {
         if !is_http_url(url) {
-            return Err("The stream URL must be an absolute HTTP or HTTPS URL.".to_owned());
+            return Ok(ProbeOutcome::Failed(
+                "The stream URL must be an absolute HTTP or HTTPS URL.".to_owned(),
+            ));
         }
         let mut args = vec![
             "--no-cache".to_owned(),
-            "--simulate".to_owned(),
-            "--quiet".to_owned(),
             "--no-warnings".to_owned(),
+            "--playlist-items".to_owned(),
+            "1".to_owned(),
+            "--print".to_owned(),
+            LIVE_STATUS_TEMPLATE.to_owned(),
         ];
         append_managed_ffmpeg_location(&mut args);
         args.push(url.to_owned());
-        match self.command_source(settings)? {
-            CommandSource::Bundled => {
-                let output = self
-                    .app
-                    .shell()
-                    .sidecar("yt-dlp")
-                    .map_err(|error| format!("Managed yt-dlp sidecar is unavailable: {error}"))?
-                    .args(args)
-                    .output()
-                    .await
-                    .map_err(|error| format!("Could not run managed yt-dlp: {error}"))?;
-                Ok(classify_probe_output(
-                    output.status.success(),
-                    &output.stdout,
-                    &output.stderr,
-                ))
+        let source = match self.command_source(settings) {
+            Ok(source) => source,
+            Err(error) => return Ok(ProbeOutcome::Failed(error)),
+        };
+        let output = match source {
+            CommandSource::Bundled => self.run_sidecar_probe(args).await,
+            CommandSource::External(path) => run_external_probe(&path, args).await,
+        };
+        let output = match output {
+            Ok(Some(output)) => output,
+            Ok(None) => {
+                return Err("Live check timed out; the next scheduled check will retry".to_owned())
             }
-            CommandSource::External(path) => {
-                let output = Command::new(path)
-                    .args(args)
-                    .output()
-                    .await
-                    .map_err(|error| {
-                        format!("Could not run the configured yt-dlp executable: {error}")
-                    })?;
-                Ok(classify_probe_output(
-                    output.status.success(),
-                    &output.stdout,
-                    &output.stderr,
-                ))
+            Err(error) => return Ok(ProbeOutcome::Failed(error)),
+        };
+        Ok(classify_probe_output(
+            output.success,
+            &output.stdout,
+            &output.stderr,
+        ))
+    }
+
+    /// Returns `Ok(None)` when the check timed out; the process tree is killed
+    /// so timed-out checks do not accumulate in the background.
+    async fn run_sidecar_probe(
+        &self,
+        args: Vec<String>,
+    ) -> Result<Option<ProbeProcessOutput>, String> {
+        let (mut events, child) = self
+            .app
+            .shell()
+            .sidecar("yt-dlp")
+            .map_err(|error| format!("Managed yt-dlp sidecar is unavailable: {error}"))?
+            .args(args)
+            .spawn()
+            .map_err(|error| format!("Could not run managed yt-dlp: {error}"))?;
+        let pid = child.pid();
+        let collect = async {
+            let mut output = ProbeProcessOutput {
+                success: false,
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            };
+            while let Some(event) = events.recv().await {
+                match event {
+                    CommandEvent::Stdout(line) => {
+                        output.stdout.extend_from_slice(&line);
+                        output.stdout.push(b'\n');
+                    }
+                    CommandEvent::Stderr(line) => {
+                        output.stderr.extend_from_slice(&line);
+                        output.stderr.push(b'\n');
+                    }
+                    CommandEvent::Terminated(payload) => {
+                        output.success = payload.code == Some(0);
+                        break;
+                    }
+                    CommandEvent::Error(error) => {
+                        output.stderr.extend_from_slice(error.as_bytes());
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            output
+        };
+        match tokio::time::timeout(PROBE_TIMEOUT, collect).await {
+            Ok(output) => Ok(Some(output)),
+            Err(_) => {
+                kill_process_tree(pid);
+                let _ = child.kill();
+                Ok(None)
             }
         }
     }
@@ -430,10 +593,22 @@ impl RecordingEngine {
         let output_directory = Path::new(&settings.download_directory);
         std::fs::create_dir_all(output_directory)
             .map_err(|error| format!("Could not create the download directory: {error}"))?;
+        if let Some(usage) = disk_usage_for(output_directory) {
+            if usage.available_bytes < MIN_FREE_DISK_BYTES {
+                return Err(
+                    "Less than 1 GB is free on the recording drive; free up space to resume recording"
+                        .to_owned(),
+                );
+            }
+        }
         let local_timestamp = Local::now()
             .format(recording_timestamp_format(settings.locale.as_str()))
             .to_string();
         let output_template = recording_output_template(output_directory, &local_timestamp);
+        let partial_output = PartialOutput {
+            directory: output_directory.to_path_buf(),
+            timestamp: local_timestamp,
+        };
         let job = self.database.create_job(&target.id, None)?;
         let output_path_receipt =
             std::env::temp_dir().join(format!("live-downloader-{}.path", job.id));
@@ -442,6 +617,9 @@ impl RecordingEngine {
             "--no-cache".to_owned(),
             "--newline".to_owned(),
             "--continue".to_owned(),
+            // MPEG-TS stays playable if the recorder is stopped or crashes
+            // before yt-dlp can remux the file.
+            "--hls-use-mpegts".to_owned(),
             "--output".to_owned(),
             output_template.to_string_lossy().to_string(),
             "--print-to-file".to_owned(),
@@ -452,64 +630,66 @@ impl RecordingEngine {
         args.push(target.url.clone());
         let cancellation = CancellationToken::new();
 
-        match source {
-            CommandSource::Bundled => {
-                let (mut events, child) = self
-                    .app
-                    .shell()
-                    .sidecar("yt-dlp")
-                    .map_err(|error| format!("Managed yt-dlp sidecar is unavailable: {error}"))?
-                    .args(args)
-                    .spawn()
-                    .map_err(|error| format!("Could not start managed yt-dlp: {error}"))?;
-                let pid = child.pid();
-                self.database.set_job_pid(&job.id, pid)?;
-                self.register_active(&job, &target, pid, cancellation.clone())?;
-                let engine = self.clone();
-                let output_path_receipt = output_path_receipt.clone();
-                tauri::async_runtime::spawn(async move {
-                    let outcome = tokio::select! {
-                        event = wait_for_sidecar_termination(&mut events) => event,
-                        _ = cancellation.cancelled() => {
-                            let _ = child.kill();
-                            "Cancelled by the user".to_owned()
-                        }
-                    };
-                    engine
-                        .finish_recording(&job, &target.id, outcome, &output_path_receipt)
-                        .await;
-                });
-            }
+        let spawned = match source {
+            CommandSource::Bundled => self
+                .app
+                .shell()
+                .sidecar("yt-dlp")
+                .map_err(|error| format!("Managed yt-dlp sidecar is unavailable: {error}"))
+                .and_then(|command| {
+                    command
+                        .args(args)
+                        .spawn()
+                        .map_err(|error| format!("Could not start managed yt-dlp: {error}"))
+                })
+                .map(|(events, child)| RecorderProcess::Sidecar { events, child }),
             CommandSource::External(path) => {
-                let mut child = Command::new(path).args(args).spawn().map_err(|error| {
-                    format!("Could not start the configured yt-dlp executable: {error}")
-                })?;
-                let pid = child
-                    .id()
-                    .ok_or_else(|| "yt-dlp did not return a process id".to_owned())?;
-                self.database.set_job_pid(&job.id, pid)?;
-                self.register_active(&job, &target, pid, cancellation.clone())?;
-                let engine = self.clone();
-                let output_path_receipt = output_path_receipt.clone();
-                tauri::async_runtime::spawn(async move {
-                    let outcome = tokio::select! {
-                        status = child.wait() => match status {
-                            Ok(status) if status.success() => "Recording completed".to_owned(),
-                            Ok(status) => format!("yt-dlp exited with code {:?}", status.code()),
-                            Err(error) => format!("yt-dlp could not be monitored: {error}"),
-                        },
-                        _ = cancellation.cancelled() => {
-                            let _ = child.start_kill();
-                            let _ = child.wait().await;
-                            "Cancelled by the user".to_owned()
+                let mut command = Command::new(path);
+                command.args(args);
+                hide_console_window(&mut command);
+                command
+                    .spawn()
+                    .map_err(|error| {
+                        format!("Could not start the configured yt-dlp executable: {error}")
+                    })
+                    .and_then(|child| {
+                        if child.id().is_some() {
+                            Ok(RecorderProcess::External(Box::new(child)))
+                        } else {
+                            Err("yt-dlp did not return a process id".to_owned())
                         }
-                    };
-                    engine
-                        .finish_recording(&job, &target.id, outcome, &output_path_receipt)
-                        .await;
-                });
+                    })
             }
-        }
+        };
+        let process = match spawned {
+            Ok(process) => process,
+            Err(error) => {
+                let _ = self.database.finish_job(&job.id, "Failed", &error, None);
+                return Err(error);
+            }
+        };
+        let pid = process.pid();
+        self.database.set_job_pid(&job.id, pid)?;
+        self.register_active(
+            &job,
+            &target,
+            pid,
+            cancellation.clone(),
+            partial_output.clone(),
+        )?;
+        let engine = self.clone();
+        tauri::async_runtime::spawn(async move {
+            let outcome = process.wait(cancellation).await;
+            engine
+                .finish_recording(
+                    &job,
+                    &target.id,
+                    outcome,
+                    &output_path_receipt,
+                    &partial_output,
+                )
+                .await;
+        });
         self.emit_change();
         Ok(())
     }
@@ -518,8 +698,9 @@ impl RecordingEngine {
         &self,
         job: &RecordingJob,
         target: &WatchTarget,
-        _pid: u32,
+        pid: u32,
         cancellation: CancellationToken,
+        output: PartialOutput,
     ) -> Result<(), String> {
         let mut runtime = self
             .runtime
@@ -530,7 +711,9 @@ impl RecordingEngine {
             job.id.clone(),
             ActiveJob {
                 target_id: target.id.clone(),
+                pid,
                 cancellation,
+                output,
             },
         );
         drop(runtime);
@@ -550,7 +733,17 @@ impl RecordingEngine {
         target_id: &str,
         outcome: String,
         output_path_receipt: &Path,
+        partial_output: &PartialOutput,
     ) {
+        let still_tracked = self
+            .runtime
+            .lock()
+            .map(|runtime| runtime.active_jobs.contains_key(&job.id))
+            .unwrap_or(false);
+        if !still_tracked {
+            // `shutdown` already finalised this job.
+            return;
+        }
         let state = if outcome.starts_with("Recording completed") {
             "Completed"
         } else if outcome.starts_with("Cancelled") {
@@ -559,16 +752,34 @@ impl RecordingEngine {
             "Failed"
         };
         let output_path = take_output_path_receipt(output_path_receipt)
+            .or_else(|| {
+                recover_partial_output(&partial_output.directory, &partial_output.timestamp)
+            })
             .map(|path| path.to_string_lossy().into_owned());
         let _ = self
             .database
             .finish_job(&job.id, state, &outcome, output_path.as_deref());
         let _ = self.database.target_recording_finished(target_id, &outcome);
+        // Released only after the database reflects the finished job, so a
+        // concurrent check cannot start a recording whose status is then
+        // overwritten above.
         if let Ok(mut runtime) = self.runtime.lock() {
             runtime.active_jobs.remove(&job.id);
         }
         self.emit_change();
         self.drain_queue();
+
+        let recorded_for = parse_job_time(&job.started_at).map(|started| now() - started);
+        if state != "Cancelled"
+            && recorded_for.is_some_and(|elapsed| elapsed >= RESUME_MIN_RECORDING)
+        {
+            let engine = self.clone();
+            let target_id = target_id.to_owned();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(RESUME_CHECK_DELAY).await;
+                engine.check_soon(&target_id);
+            });
+        }
     }
 
     fn drain_queue(&self) {
@@ -629,6 +840,13 @@ impl RecordingEngine {
                     true
                 }
             })
+            .unwrap_or(false)
+    }
+
+    fn is_suppressed(&self, target_id: &str) -> bool {
+        self.runtime
+            .lock()
+            .map(|runtime| runtime.suppressed_targets.contains(target_id))
             .unwrap_or(false)
     }
 
@@ -861,6 +1079,146 @@ fn bundled_sidecar_directory_from(executable: &Path) -> Option<PathBuf> {
     }
 }
 
+enum RecorderProcess {
+    Sidecar {
+        events: tauri::async_runtime::Receiver<CommandEvent>,
+        child: tauri_plugin_shell::process::CommandChild,
+    },
+    External(Box<tokio::process::Child>),
+}
+
+impl RecorderProcess {
+    fn pid(&self) -> u32 {
+        match self {
+            Self::Sidecar { child, .. } => child.pid(),
+            Self::External(child) => child.id().unwrap_or_default(),
+        }
+    }
+
+    /// Waits for yt-dlp to exit or for cancellation. Cancelling terminates the
+    /// whole process tree and waits for it to exit so the partial file is
+    /// released before it is salvaged.
+    async fn wait(self, cancellation: CancellationToken) -> String {
+        let pid = self.pid();
+        match self {
+            Self::Sidecar { mut events, child } => {
+                tokio::select! {
+                    outcome = wait_for_sidecar_termination(&mut events) => outcome,
+                    _ = cancellation.cancelled() => {
+                        kill_process_tree(pid);
+                        let _ = tokio::time::timeout(
+                            PROCESS_EXIT_TIMEOUT,
+                            wait_for_sidecar_termination(&mut events),
+                        )
+                        .await;
+                        let _ = child.kill();
+                        "Cancelled by the user".to_owned()
+                    }
+                }
+            }
+            Self::External(mut child) => {
+                tokio::select! {
+                    status = child.wait() => match status {
+                        Ok(status) if status.success() => "Recording completed".to_owned(),
+                        Ok(status) => format!("yt-dlp exited with code {:?}", status.code()),
+                        Err(error) => format!("yt-dlp could not be monitored: {error}"),
+                    },
+                    _ = cancellation.cancelled() => {
+                        kill_process_tree(pid);
+                        let _ = child.start_kill();
+                        let _ = tokio::time::timeout(PROCESS_EXIT_TIMEOUT, child.wait()).await;
+                        "Cancelled by the user".to_owned()
+                    }
+                }
+            }
+        }
+    }
+}
+
+async fn run_external_probe(
+    path: &Path,
+    args: Vec<String>,
+) -> Result<Option<ProbeProcessOutput>, String> {
+    let mut command = Command::new(path);
+    command
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .kill_on_drop(true);
+    hide_console_window(&mut command);
+    match tokio::time::timeout(PROBE_TIMEOUT, command.output()).await {
+        Ok(Ok(output)) => Ok(Some(ProbeProcessOutput {
+            success: output.status.success(),
+            stdout: output.stdout,
+            stderr: output.stderr,
+        })),
+        Ok(Err(error)) => Err(format!(
+            "Could not run the configured yt-dlp executable: {error}"
+        )),
+        Err(_) => Ok(None),
+    }
+}
+
+/// Finds the file of a recording whose yt-dlp process ended without reporting
+/// a final path. A stopped recorder leaves a `.part` file behind; it is renamed
+/// so it shows up as a normal, playable recording.
+fn recover_partial_output(directory: &Path, timestamp: &str) -> Option<PathBuf> {
+    let marker = format!(" - {timestamp}.");
+    let mut finished = Vec::new();
+    let mut partial = Vec::new();
+    for entry in std::fs::read_dir(directory).ok()?.filter_map(Result::ok) {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if !name.contains(&marker) || !path.is_file() {
+            continue;
+        }
+        let size = entry.metadata().map(|metadata| metadata.len()).unwrap_or(0);
+        if name.ends_with(".part") {
+            partial.push((size, path));
+        } else if is_recording_file(&path) {
+            finished.push((size, path));
+        }
+    }
+    if let Some((_, path)) = finished.into_iter().max_by_key(|(size, _)| *size) {
+        return Some(path);
+    }
+    let (size, part) = partial.into_iter().max_by_key(|(size, _)| *size)?;
+    if size == 0 {
+        return None;
+    }
+    let completed = salvaged_file_name(&part)?;
+    if completed.exists() {
+        return None;
+    }
+    std::fs::rename(&part, &completed).ok()?;
+    Some(completed)
+}
+
+/// `name.mp4.part` becomes `name.ts` when the data is MPEG-TS (the live
+/// default), otherwise `name.mp4`.
+fn salvaged_file_name(part: &Path) -> Option<PathBuf> {
+    let without_part = part.with_extension("");
+    if is_mpeg_ts(part) {
+        Some(without_part.with_extension("ts"))
+    } else {
+        Some(without_part)
+    }
+}
+
+fn is_mpeg_ts(path: &Path) -> bool {
+    use std::io::Read;
+
+    const PACKET: usize = 188;
+    let mut header = [0_u8; PACKET * 2 + 1];
+    std::fs::File::open(path)
+        .and_then(|mut file| file.read_exact(&mut header))
+        .is_ok()
+        && header[0] == 0x47
+        && header[PACKET] == 0x47
+        && header[PACKET * 2] == 0x47
+}
+
 async fn wait_for_sidecar_termination(
     events: &mut tauri::async_runtime::Receiver<CommandEvent>,
 ) -> String {
@@ -886,8 +1244,8 @@ mod tests {
 
     use super::{
         bundled_sidecar_directory_from, legacy_candidate_score, normalize_name,
-        recording_output_template, recording_timestamp_format, take_output_path_receipt,
-        OutputCandidate,
+        recording_output_template, recording_timestamp_format, recover_partial_output,
+        take_output_path_receipt, OutputCandidate,
     };
     use crate::domain::{RecordingJob, RecordingState, TargetState, WatchTarget};
 
@@ -974,5 +1332,77 @@ mod tests {
         };
 
         assert!(legacy_candidate_score(&candidate, &target, &job).is_some());
+    }
+
+    fn temporary_directory(label: &str) -> PathBuf {
+        let directory =
+            std::env::temp_dir().join(format!("live-downloader-{label}-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).expect("temp directory should be created");
+        directory
+    }
+
+    #[test]
+    fn salvages_a_stopped_mpeg_ts_recording_as_a_ts_file() {
+        let directory = temporary_directory("salvage-ts");
+        let timestamp = "07-13-2026 22-42-15";
+        let part = directory.join(format!("channel - {timestamp}.mp4.part"));
+        let mut packets = vec![0_u8; 188 * 3];
+        for offset in [0, 188, 376] {
+            packets[offset] = 0x47;
+        }
+        std::fs::write(&part, packets).expect("partial file should be created");
+        std::fs::write(directory.join("other - 01-01-2026 00-00-00.mp4.part"), b"x")
+            .expect("unrelated file should be created");
+
+        let recovered = recover_partial_output(&directory, timestamp);
+
+        let expected = directory.join(format!("channel - {timestamp}.ts"));
+        assert_eq!(recovered, Some(expected.clone()));
+        assert!(expected.is_file());
+        assert!(!part.exists());
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn salvage_prefers_a_finished_file_and_ignores_empty_parts() {
+        let directory = temporary_directory("salvage-finished");
+        let timestamp = "07-13-2026 22-42-15";
+        let finished = directory.join(format!("channel - {timestamp}.mp4"));
+        std::fs::write(&finished, b"done").expect("finished file should be created");
+        std::fs::write(
+            directory.join(format!("channel - {timestamp}.mp4.part")),
+            b"partial",
+        )
+        .expect("partial file should be created");
+        assert_eq!(
+            recover_partial_output(&directory, timestamp),
+            Some(finished.clone())
+        );
+
+        std::fs::remove_file(&finished).expect("finished file should be removed");
+        let empty_timestamp = "07-14-2026 10-00-00";
+        std::fs::write(
+            directory.join(format!("channel - {empty_timestamp}.mp4.part")),
+            b"",
+        )
+        .expect("empty partial file should be created");
+        assert_eq!(recover_partial_output(&directory, empty_timestamp), None);
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn salvaged_non_ts_partial_keeps_its_container_extension() {
+        let directory = temporary_directory("salvage-mp4");
+        let timestamp = "07-13-2026 22-42-15";
+        std::fs::write(
+            directory.join(format!("channel - {timestamp}.mp4.part")),
+            b"not an mpeg-ts stream",
+        )
+        .expect("partial file should be created");
+        assert_eq!(
+            recover_partial_output(&directory, timestamp),
+            Some(directory.join(format!("channel - {timestamp}.mp4")))
+        );
+        let _ = std::fs::remove_dir_all(directory);
     }
 }
