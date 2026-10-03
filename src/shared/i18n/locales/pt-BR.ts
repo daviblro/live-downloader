@@ -171,6 +171,18 @@ export const portugueseBrazil: Translation = {
     description: "Baixe o instalador mais recente no GitHub Releases quando estiver pronto.",
     viewRelease: "Ver lançamento",
     dismiss: "Fechar aviso de atualização",
+    installableDescription:
+      "Atualize agora para baixar e instalar. O Live Downloader reinicia quando a atualização terminar.",
+    updateNow: "Atualizar agora",
+    updating: "Atualizando…",
+    downloading: (percent) =>
+      percent === null ? "Baixando a atualização…" : `Baixando a atualização… ${percent}%`,
+    installing: "Instalando a atualização. O Live Downloader será reiniciado em instantes.",
+    failed: (message) => `Não foi possível instalar a atualização: ${message}`,
+    recordingsActiveConfirmation: (count) =>
+      count === 1
+        ? "1 gravação está em andamento. A atualização vai interrompê-la e manter o que já foi gravado. Atualizar agora?"
+        : `${count} gravações estão em andamento. A atualização vai interrompê-las e manter o que já foi gravado. Atualizar agora?`,
   },
   toast: {
     notifications: "Notificações",
@@ -183,9 +195,16 @@ export const portugueseBrazil: Translation = {
     checking: (name) => `Verificando ${name} agora.`,
     recordingStopping: "A gravação está sendo interrompida.",
     recordingStopped: "Gravação interrompida na prévia.",
-    recordingStartedBackground: "Uma stream começou a gravar em segundo plano.",
+    recordingStartedFor: (name) => `${name} está ao vivo. Gravação iniciada.`,
+    recordingFinishedFor: (name) => `${name}: gravação concluída.`,
+    recordingFailedFor: (name) =>
+      `${name}: a gravação parou inesperadamente. A stream será verificada novamente.`,
     historyCleared: "Histórico de gravações limpo.",
     removed: (name) => `${name} removida.`,
+    removeConfirmation: (name) =>
+      `Remover ${name} da lista de monitoramento? O histórico de gravações será mantido.`,
+    removeRecordingConfirmation: (name) =>
+      `${name} está gravando agora. Interromper a gravação e remover da lista de monitoramento?`,
     updated: (name) => `${name} atualizada.`,
   },
   states: {
@@ -211,5 +230,18 @@ export const portugueseBrazil: Translation = {
     "Recording started": "Gravação iniciada",
     "Recording completed": "Gravação concluída",
     "Preparing the recording file": "Preparando o arquivo de gravação",
+    "Waiting for the stream to go live": "Aguardando a stream entrar no ar",
+    "Checking whether the stream is live": "Verificando se a stream está ao vivo",
+    "Waiting for a recording slot": "Aguardando uma vaga de gravação",
+    "Live check timed out; the next scheduled check will retry":
+      "A verificação expirou; a próxima verificação agendada tentará novamente",
+    "Previous recording was interrupted": "A gravação anterior foi interrompida",
+    "Recording was interrupted when the application stopped":
+      "A gravação foi interrompida quando o aplicativo foi fechado",
+    "Cancelled by the user": "Interrompida pelo usuário",
+    "Recording stopped by the user; waiting for the next broadcast":
+      "Gravação interrompida pelo usuário; aguardando a próxima transmissão",
+    "Less than 1 GB is free on the recording drive; free up space to resume recording":
+      "Há menos de 1 GB livre na unidade de gravação; libere espaço para voltar a gravar",
   },
 };

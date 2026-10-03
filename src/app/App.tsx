@@ -1,4 +1,3 @@
-import { getVersion } from "@tauri-apps/api/app";
 import { Menu } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ToastContainer, toast, type Theme } from "react-toastify";
@@ -6,18 +5,19 @@ import { HelpPage } from "../features/help/components/HelpPage";
 import { OverviewPage } from "../features/monitoring/components/OverviewPage";
 import { HistoryPage } from "../features/recordings/components/HistoryPage";
 import { SettingsPage } from "../features/settings/components/SettingsPage";
-import { AvailableRelease, ReleaseNotice } from "../features/updates/components/ReleaseNotice";
+import {
+  ReleaseNotice,
+  type UpdateInstallState,
+} from "../features/updates/components/ReleaseNotice";
+import { releasesPageUrl, useAvailableRelease } from "../features/updates/useAvailableRelease";
 import { AddStreamDialog } from "../features/watch-targets/components/AddStreamDialog";
 import { WatchListPage } from "../features/watch-targets/components/WatchListPage";
-import { isNewerRelease, type GitHubRelease } from "../features/updates/release";
 import type { AppSettings, Locale, RecordingJob, WatchTarget } from "../shared/contracts";
 import { I18nProvider, translations } from "../shared/i18n";
 import { api, isDesktop } from "../shared/tauri/client";
 import { Sidebar, type View } from "./layout/Sidebar";
 import { useAppData } from "./useAppData";
 
-const releasesApiUrl = "https://api.github.com/repos/daviblro/live-downloader/releases/latest";
-const releasesPageUrl = "https://github.com/daviblro/live-downloader/releases";
 const issuesPageUrl = "https://github.com/daviblro/live-downloader/issues/new/choose";
 
 function useToastTheme(theme: AppSettings["theme"]): Theme {
@@ -40,7 +40,10 @@ export default function App() {
   const [filter, setFilter] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [editingTarget, setEditingTarget] = useState<WatchTarget | null>(null);
-  const [availableRelease, setAvailableRelease] = useState<AvailableRelease | null>(null);
+  const [availableRelease, setAvailableRelease] = useAvailableRelease();
+  const [updateInstallState, setUpdateInstallState] = useState<UpdateInstallState>({
+    phase: "idle",
+  });
   const [localePreview, setLocalePreview] = useState<Locale | null>(null);
   const [historyJobs, setHistoryJobs] = useState<RecordingJob[]>([]);
   const locale = localePreview ?? payload.settings.locale;
@@ -54,32 +57,6 @@ export default function App() {
         : (payload.targets[0]?.id ?? null),
     );
   }, [payload.targets]);
-
-  useEffect(() => {
-    if (!isDesktop) return;
-    let cancelled = false;
-    void (async () => {
-      const [installedVersion, response] = await Promise.all([
-        getVersion(),
-        fetch(releasesApiUrl, { headers: { Accept: "application/vnd.github+json" } }),
-      ]);
-      if (!response.ok) return;
-      const release = (await response.json()) as GitHubRelease;
-      if (
-        cancelled ||
-        release.draft ||
-        release.prerelease ||
-        typeof release.tag_name !== "string" ||
-        typeof release.html_url !== "string"
-      )
-        return;
-      if (isNewerRelease(release.tag_name, installedVersion))
-        setAvailableRelease({ version: release.tag_name, url: release.html_url });
-    })().catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = payload.settings.theme;
@@ -183,6 +160,34 @@ export default function App() {
       if (isDesktop) await api.openUrl(url);
       else window.open(url, "_blank", "noopener,noreferrer");
     });
+  const installUpdate = async () => {
+    const activeRecordings = payload.engine.activeRecordings;
+    if (
+      activeRecordings > 0 &&
+      !window.confirm(t.release.recordingsActiveConfirmation(activeRecordings))
+    )
+      return;
+    let total: number | null = null;
+    let received = 0;
+    setUpdateInstallState({ phase: "downloading", percent: null });
+    try {
+      await api.installUpdate((progress) => {
+        if (progress.event === "started") total = progress.contentLength;
+        else if (progress.event === "progress") {
+          received += progress.chunkLength;
+          setUpdateInstallState({
+            phase: "downloading",
+            percent: total ? Math.min(100, Math.floor((received * 100) / total)) : null,
+          });
+        } else setUpdateInstallState({ phase: "installing" });
+      });
+    } catch (reason) {
+      setUpdateInstallState({
+        phase: "failed",
+        message: reason instanceof Error ? reason.message : String(reason),
+      });
+    }
+  };
   const pauseAll = () =>
     void action(async () => {
       if (isDesktop) {
@@ -229,7 +234,12 @@ export default function App() {
     void action(async () => {
       if (isDesktop) await api.revealRecording(jobId);
     });
-  const removeTarget = (target: WatchTarget) =>
+  const removeTarget = (target: WatchTarget) => {
+    const confirmation =
+      target.state === "Recording"
+        ? t.toast.removeRecordingConfirmation(target.name)
+        : t.toast.removeConfirmation(target.name);
+    if (!window.confirm(confirmation)) return;
     void action(async () => {
       if (isDesktop) {
         await api.removeTarget(target.id);
@@ -240,6 +250,7 @@ export default function App() {
           targets: current.targets.filter((item) => item.id !== target.id),
         }));
     }, t.toast.removed(target.name));
+  };
   const toggleTarget = (target: WatchTarget) =>
     void action(async () => {
       if (isDesktop) {
@@ -282,6 +293,8 @@ export default function App() {
               {availableRelease && (
                 <ReleaseNotice
                   release={availableRelease}
+                  installState={updateInstallState}
+                  onInstall={() => void installUpdate()}
                   onOpen={openAvailableRelease}
                   onDismiss={() => setAvailableRelease(null)}
                 />

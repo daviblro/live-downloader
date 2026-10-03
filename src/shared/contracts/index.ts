@@ -95,3 +95,13 @@ export interface UpdateTargetInput extends CreateTargetInput {
   id: string;
   enabled: boolean;
 }
+
+export interface UpdateCheck {
+  configured: boolean;
+  update: { version: string; notes: string | null } | null;
+}
+
+export type UpdateProgress =
+  | { event: "started"; contentLength: number | null }
+  | { event: "progress"; chunkLength: number }
+  | { event: "installing" };

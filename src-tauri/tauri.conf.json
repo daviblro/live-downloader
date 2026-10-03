@@ -52,7 +52,14 @@
   },
   "plugins": {
     "updater": {
-      "active": false
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/daviblro/live-downloader/releases/latest/download/latest.json"
+      ],
+      "requireSignedVersion": true,
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

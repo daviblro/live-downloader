@@ -41,6 +41,7 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(move |app| {
             let data_directory = application_data_directory().map_err(std::io::Error::other)?;
             let database = Arc::new(
@@ -90,7 +91,9 @@ pub fn run() {
             commands::recordings::clear_history,
             commands::legacy::import_legacy,
             commands::recordings::open_download_directory,
-            commands::recordings::reveal_recording
+            commands::recordings::reveal_recording,
+            commands::updates::check_for_update,
+            commands::updates::install_update
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -103,6 +106,15 @@ pub fn run() {
         });
 
     builder
-        .run(tauri::generate_context!())
-        .expect("error while running Live Downloader");
+        .build(tauri::generate_context!())
+        .expect("error while building Live Downloader")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                // Recorder children (yt-dlp and its FFmpeg process) would
+                // otherwise keep running after the application exits.
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.engine.shutdown();
+                }
+            }
+        });
 }

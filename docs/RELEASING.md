@@ -17,9 +17,24 @@ pnpm version:bump 1.0.3
 The command accepts a semantic version (including prerelease and build metadata)
 and reports each updated file. It does not create a commit or Git tag.
 
-The app does not use Tauri's in-place updater. At launch it reads the public
-GitHub Releases API and, if a newer stable release is available, offers a button
-to open that release in the user's browser.
+## In-app updates
+
+Releases built with the updater signing key publish three assets: the NSIS
+installer, its `.sig` signature, and `latest.json`. Installed apps read
+`releases/latest/download/latest.json`, verify the installer against the public
+key embedded at build time, and install it in place. Signatures are bound to the
+release version, so `latest.json` cannot point a version number at another
+release's installer.
+
+Signing requires the `TAURI_SIGNING_PRIVATE_KEY` and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets and the
+`LIVE_DOWNLOADER_UPDATER_PUBKEY` variable (see the README for setup). Without
+them the workflow publishes only the installer and the app falls back to a link
+to the GitHub release. Never rotate or discard the key casually: installs built
+with one public key accept updates signed only by its private key.
+
+After publishing, confirm the release lists all three assets and that
+`latest.json` names the new version.
 
 ## Local build
 
@@ -57,7 +72,8 @@ once during setup.
   checks the frontend, runs Rust tests, builds the NSIS installer, and retains the
   installer as a short-lived workflow artifact.
 - **Publish Windows release** runs only for `v*` tags. It builds the installer on
-  a clean Windows runner and attaches it to the GitHub Release. The workflow uses
+  a clean Windows runner, signs updater artifacts when the key is configured, and
+  attaches the installer, signature, and `latest.json` to the GitHub Release. The workflow uses
   GitHub's built-in token and requires `contents: write` permission.
 
 ## Signing and licensing

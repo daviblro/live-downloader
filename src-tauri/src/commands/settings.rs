@@ -14,6 +14,13 @@ pub async fn update_settings(
     if settings.download_directory.trim().is_empty() {
         return Err("Choose a download directory.".to_owned());
     }
+    if !(30..=86_400).contains(&settings.probe_interval_seconds) {
+        return Err("Check the streams every 30 to 86400 seconds.".to_owned());
+    }
+    if !(1..=16).contains(&settings.max_concurrent_recordings) {
+        return Err("Allow between 1 and 16 concurrent recordings.".to_owned());
+    }
+    let previous = state.database.settings()?;
     std::fs::create_dir_all(PathBuf::from(&settings.download_directory))
         .map_err(|error| format!("Could not create the download directory: {error}"))?;
     let autolaunch = app.autolaunch();
@@ -36,6 +43,8 @@ pub async fn update_settings(
         }
         return Err(error);
     }
-    state.engine.settings_changed();
+    state
+        .engine
+        .settings_changed(previous.probe_interval_seconds != settings.probe_interval_seconds);
     Ok(settings)
 }
