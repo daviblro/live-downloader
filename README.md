@@ -14,7 +14,8 @@ installation or PATH setup is required.
 2. Download the latest `*_x64-setup.exe` installer.
 3. Run the installer, then start **Live Downloader** from the Start menu.
 4. Select **Add stream**, give the source a name, and enter an authorised HTTP or
-   HTTPS stream URL.
+   HTTPS stream URL, such as a Twitch, YouTube, or Kick channel
+   (`https://kick.com/channel`).
 
 The installer is per-user and normally does not request administrator access. If
 Microsoft WebView2 is not already installed, Windows downloads it during setup.
@@ -28,6 +29,10 @@ Microsoft WebView2 is not already installed, Windows downloads it during setup.
 - Optionally select **Connect Twitch** under **Settings** to use Twitch channel
   profile pictures. Monitoring and recording continue to work without a Twitch
   connection.
+- Kick channels (`https://kick.com/channel`) are monitored and recorded like any
+  other source. Kick blocks plain HTTP clients, so if you configure an external
+  yt-dlp instead of the bundled one, it must include browser impersonation
+  support (`curl_cffi`).
 - Recordings use `channel - mm-dd-yyyy hh-mm-ss.ext` in English and
   `channel - dd-mm-yyyy hh-mm-ss.ext` in Portuguese, with Windows-safe separators.
 - **Stop recording** ends the current broadcast's recording; the source is not

@@ -3,6 +3,7 @@ use tauri::State;
 use crate::{
     app::AppState,
     domain::{CreateTargetInput, UpdateTargetInput, WatchTarget},
+    kick,
     legacy::is_http_url,
 };
 
@@ -19,6 +20,7 @@ pub async fn add_target(
     if !is_http_url(url) {
         return Err("Enter an absolute HTTP or HTTPS stream URL.".to_owned());
     }
+    kick::validate_target_url(url)?;
     let metadata = state.twitch.metadata_for_url(url).await.ok().flatten();
     let target = state
         .database
@@ -40,6 +42,7 @@ pub async fn update_target(
     if input.name.trim().is_empty() || !is_http_url(input.url.trim()) {
         return Err("Provide a name and an absolute HTTP or HTTPS stream URL.".to_owned());
     }
+    kick::validate_target_url(input.url.trim())?;
     let url_changed = target.url != input.url.trim();
     let enabled_now = input.enabled && !target.enabled;
     target.name = input.name.trim().to_owned();

@@ -80,6 +80,8 @@ export interface Translation {
     openIssue: string;
     youtubeTitle: string;
     youtubeBody: string;
+    kickTitle: string;
+    kickBody: string;
     startTitle: string;
     startBody: string;
     accessTitle: string;

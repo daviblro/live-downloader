@@ -25,6 +25,7 @@ use crate::{
     domain::{
         format_time, now, AppSettings, EngineSummary, RecordingJob, RecordingState, WatchTarget,
     },
+    kick,
     legacy::is_http_url,
     persistence::Database,
     platform::{
@@ -468,11 +469,14 @@ impl RecordingEngine {
             }
             Err(error) => return Ok(ProbeOutcome::Failed(error)),
         };
-        Ok(classify_probe_output(
-            output.success,
-            &output.stdout,
-            &output.stderr,
-        ))
+        Ok(
+            match classify_probe_output(output.success, &output.stdout, &output.stderr) {
+                ProbeOutcome::Failed(message) => {
+                    ProbeOutcome::Failed(kick::explain_probe_failure(url, message))
+                }
+                outcome => outcome,
+            },
+        )
     }
 
     /// Returns `Ok(None)` when the check timed out; the process tree is killed

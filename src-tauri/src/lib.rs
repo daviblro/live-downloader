@@ -1,6 +1,7 @@
 mod app;
 mod commands;
 mod domain;
+mod kick;
 mod legacy;
 mod monitoring;
 mod persistence;

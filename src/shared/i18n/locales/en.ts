@@ -87,6 +87,9 @@ export const english: Translation = {
     youtubeTitle: "Does it support YouTube livestreams?",
     youtubeBody:
       "Yes. Add an authorised YouTube livestream or channel /live URL and Live Downloader will monitor it just like any other supported stream.",
+    kickTitle: "Does it support Kick livestreams?",
+    kickBody:
+      "Yes. Add a Kick channel URL, such as https://kick.com/channel. Live Downloader checks whether the channel is live and records the broadcast when it starts.",
     startTitle: "When does recording begin?",
     startBody:
       "Recording starts when a scheduled check finds the stream available. It captures from that point onward, not the portion broadcast before detection.",

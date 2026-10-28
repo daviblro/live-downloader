@@ -88,6 +88,9 @@ export const portugueseBrazil: Translation = {
     youtubeTitle: "O app suporta lives do YouTube?",
     youtubeBody:
       "Sim. Adicione uma live autorizada do YouTube ou a URL /live de um canal, e o Live Downloader vai monitorá-la como qualquer outra stream compatível.",
+    kickTitle: "O app suporta lives da Kick?",
+    kickBody:
+      "Sim. Adicione a URL de um canal da Kick, como https://kick.com/canal. O Live Downloader verifica se o canal está ao vivo e grava a transmissão quando ela começa.",
     startTitle: "Quando a gravação começa?",
     startBody:
       "A gravação começa quando uma verificação agendada encontra a stream disponível. Ela é capturada a partir desse momento, não da parte transmitida antes da detecção.",

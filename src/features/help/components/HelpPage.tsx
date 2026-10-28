@@ -30,6 +30,13 @@ export function HelpPage({ onOpenIssues }: HelpPageProps) {
         </article>
         <article className="faq-card">
           <div className="faq-icon">
+            <RadioTower size={20} />
+          </div>
+          <h2>{t.help.kickTitle}</h2>
+          <p>{t.help.kickBody}</p>
+        </article>
+        <article className="faq-card">
+          <div className="faq-icon">
             <CircleHelp size={20} />
           </div>
           <h2>{t.help.startTitle}</h2>
